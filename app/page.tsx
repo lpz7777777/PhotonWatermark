@@ -1,0 +1,1385 @@
+"use client";
+
+import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import exifr from "exifr";
+import JSZip from "jszip";
+
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm";
+type ExportFormat = "png" | "jpeg";
+type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
+type LayoutKey = PresetId | `film-mode-${PresetId}`;
+
+type ElementTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  fontScale: number;
+};
+
+type ElementBounds = { x: number; y: number; width: number; height: number };
+type ElementBoundsMap = Partial<Record<ElementId, ElementBounds>>;
+type RenderedPhoto = { canvas: HTMLCanvasElement; bounds: ElementBoundsMap };
+
+type PhotoMetadata = {
+  make?: string;
+  model?: string;
+  lens?: string;
+  aperture?: string;
+  exposure?: string;
+  iso?: string;
+  focalLength?: string;
+  takenAt?: string;
+};
+
+type PhotoItem = {
+  id: string;
+  file: File;
+  url: string;
+  image: HTMLImageElement;
+  width: number;
+  height: number;
+  metadata: PhotoMetadata;
+  filmMetadata: PhotoMetadata;
+  autoMetadata: PhotoMetadata;
+};
+
+const defaultFilmMetadata: PhotoMetadata = {
+  make: "OLYMPUS",
+  model: "OM-1",
+  lens: "50mm/1.8",
+  aperture: "",
+  exposure: "",
+  iso: "100",
+  focalLength: "",
+  takenAt: "",
+};
+
+type Settings = {
+  preset: PresetId;
+  bandSize: number;
+  filmBandSize: number;
+  signature: string;
+  showSignature: boolean;
+  showBrand: boolean;
+  showModel: boolean;
+  showDate: boolean;
+  showLens: boolean;
+  showAperture: boolean;
+  showExposure: boolean;
+  showIso: boolean;
+  showFocalLength: boolean;
+  filmMode: boolean;
+  filmShowSignature: boolean;
+  filmShowBrand: boolean;
+  filmShowModel: boolean;
+  filmShowDate: boolean;
+  filmShowLens: boolean;
+  filmShowAperture: boolean;
+  filmShowExposure: boolean;
+  filmShowIso: boolean;
+  filmShowFocalLength: boolean;
+  filmBrand: string;
+  filmName: string;
+  labName: string;
+  scannerBrand: string;
+  scannerName: string;
+  showFilmBrand: boolean;
+  showFilmName: boolean;
+  showLab: boolean;
+  showScanner: boolean;
+  transforms: Partial<Record<LayoutKey, Partial<Record<ElementId, ElementTransform>>>>;
+  format: ExportFormat;
+};
+
+type Layout = {
+  width: number;
+  height: number;
+  photoX: number;
+  photoY: number;
+  photoWidth: number;
+  photoHeight: number;
+  bandX: number;
+  bandY: number;
+  bandWidth: number;
+  bandHeight: number;
+};
+
+type ThemePalette = {
+  background: string;
+  ink: string;
+  muted: string;
+  faint: string;
+  accent: string;
+};
+
+const presets: Array<{ id: PresetId; name: string; note: string; swatch: string }> = [
+  { id: "classic", name: "经典铭牌", note: "还原样片", swatch: "classic" },
+  { id: "noir", name: "夜黑铭牌", note: "高反差", swatch: "noir" },
+  { id: "gallery", name: "画廊相框", note: "四周留白", swatch: "gallery" },
+  { id: "overlay", name: "渐变叠印", note: "不增加尺寸", swatch: "overlay" },
+  { id: "film", name: "胶片索引", note: "编辑感", swatch: "film" },
+  { id: "kodak", name: "柯达胶片", note: "黄 · 红主题", swatch: "kodak" },
+  { id: "fujifilm", name: "富士胶片", note: "高级绿主题", swatch: "fujifilm" },
+];
+
+const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+type BrandDefinition = {
+  value: string;
+  label: string;
+  keywords: string[];
+  asset?: string;
+  monochrome?: boolean;
+  color?: string;
+};
+
+const brands: BrandDefinition[] = [
+  { value: "Canon", label: "Canon", keywords: ["CANON"], asset: "canon-mark.png", color: "#cc0000" },
+  { value: "Nikon", label: "Nikon", keywords: ["NIKON"], asset: "nikon.svg" },
+  { value: "SONY", label: "Sony", keywords: ["SONY"], asset: "sony.svg", monochrome: true },
+  { value: "FUJIFILM", label: "Fujifilm", keywords: ["FUJI"], asset: "fujifilm.svg" },
+  { value: "Leica Camera AG", label: "Leica", keywords: ["LEICA"], asset: "leica.svg", color: "#d71920" },
+  { value: "Hasselblad", label: "Hasselblad", keywords: ["HASSELBLAD"], asset: "hasselblad.svg", monochrome: true },
+  { value: "OM SYSTEM", label: "OM SYSTEM", keywords: ["OM SYSTEM", "OM DIGITAL"], asset: "omsystem.svg", monochrome: true },
+  { value: "OLYMPUS", label: "Olympus", keywords: ["OLYMPUS"], asset: "olympus.png" },
+  { value: "Panasonic", label: "Panasonic / Lumix", keywords: ["PANASONIC", "LUMIX"], asset: "panasonic.png" },
+  { value: "RICOH", label: "Ricoh", keywords: ["RICOH"], asset: "ricoh.svg" },
+  { value: "PENTAX", label: "Pentax", keywords: ["PENTAX"], color: "#d71920" },
+  { value: "DJI", label: "DJI", keywords: ["DJI"], asset: "dji.svg", monochrome: true },
+  { value: "Apple", label: "Apple / iPhone", keywords: ["APPLE", "IPHONE", "IPAD"], asset: "apple.svg", monochrome: true },
+  { value: "HUAWEI", label: "Huawei / 华为", keywords: ["HUAWEI", "华为"], asset: "huawei.svg", monochrome: true },
+  { value: "HONOR", label: "HONOR / 荣耀", keywords: ["HONOR", "荣耀"], asset: "honor.svg", monochrome: true },
+  { value: "Xiaomi", label: "Xiaomi / 小米", keywords: ["XIAOMI", "小米", "REDMI", "POCO"], asset: "xiaomi.svg", monochrome: true },
+  { value: "OPPO", label: "OPPO", keywords: ["OPPO", "ONEPLUS", "一加"], asset: "oppo.svg", monochrome: true },
+  { value: "vivo", label: "vivo", keywords: ["VIVO"], asset: "vivo.svg", monochrome: true },
+  { value: "Google", label: "Google / Pixel", keywords: ["GOOGLE"] },
+  { value: "Samsung", label: "Samsung", keywords: ["SAMSUNG"], color: "#1428a0" },
+];
+
+const filmBrands: BrandDefinition[] = [
+  { value: "KODAK", label: "Kodak / 柯达", keywords: ["KODAK"], asset: "kodak.png" },
+  { value: "LUCKY", label: "Lucky / 乐凯", keywords: ["LUCKY", "乐凯"], asset: "lucky.png", monochrome: true },
+  { value: "FUJIFILM", label: "Fujifilm / 富士", keywords: ["FUJIFILM", "FUJI", "富士"], asset: "fujifilm.svg" },
+];
+
+const scannerBrands: BrandDefinition[] = [
+  { value: "NORITSU", label: "Noritsu / 诺日士", keywords: ["NORITSU", "诺日士"], asset: "noritsu.svg", monochrome: true },
+  { value: "FUJIFILM", label: "Fujifilm Frontier / 富士", keywords: ["FUJIFILM", "FUJI", "FRONTIER", "富士"], asset: "fujifilm.svg" },
+];
+
+const elementLabels: Record<ElementId, string> = {
+  cameraBrand: "相机厂商 Logo",
+  cameraModel: "相机型号",
+  lens: "镜头信息",
+  aperture: "光圈",
+  exposure: "快门",
+  iso: "ISO",
+  focalLength: "焦距",
+  signature: "签名",
+  date: "拍摄日期",
+  filmBrand: "胶卷厂商 Logo",
+  filmName: "胶卷名称",
+  lab: "冲洗店名称",
+  scanner: "扫描仪 Logo 与名称",
+};
+
+const standardElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "signature", "date"];
+const filmElementIds: ElementId[] = [...standardElementIds, "filmBrand", "filmName", "lab", "scanner"];
+const defaultTransform: ElementTransform = { x: 0, y: 0, scale: 1, fontScale: 1 };
+let collectingElementBounds: ElementBoundsMap | null = null;
+
+function recordElementBounds(element: ElementId, bounds: ElementBounds) {
+  if (!collectingElementBounds) return;
+  const previous = collectingElementBounds[element];
+  if (!previous) {
+    collectingElementBounds[element] = bounds;
+    return;
+  }
+  const left = Math.min(previous.x, bounds.x);
+  const top = Math.min(previous.y, bounds.y);
+  const right = Math.max(previous.x + previous.width, bounds.x + bounds.width);
+  const bottom = Math.max(previous.y + previous.height, bounds.y + bounds.height);
+  collectingElementBounds[element] = { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+const logoCache = new Map<string, HTMLImageElement>();
+let logoLoadPromise: Promise<void> | undefined;
+
+function preloadOfficialLogos() {
+  if (logoLoadPromise) return logoLoadPromise;
+  const definitions = [...brands, ...filmBrands, ...scannerBrands]
+    .filter((brand, index, all) => brand.asset && all.findIndex((candidate) => candidate.value === brand.value && candidate.asset === brand.asset) === index);
+  logoLoadPromise = Promise.all(
+    definitions.map((brand) => new Promise<void>((resolve) => {
+      const image = new Image();
+      image.onload = () => {
+        logoCache.set(brand.value, image);
+        resolve();
+      };
+      image.onerror = () => resolve();
+      image.src = new URL(`brands/${brand.asset}`, document.baseURI).href;
+    })),
+  ).then(() => undefined);
+  return logoLoadPromise;
+}
+
+function clean(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const result = value.replace(/\0/g, "").trim();
+  return result || undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  const result = Number(value);
+  return Number.isFinite(result) ? result : undefined;
+}
+
+function numberString(value: unknown): string | undefined {
+  const result = asNumber(value);
+  if (result === undefined) return undefined;
+  return Number.isInteger(result) ? result.toFixed(0) : result.toString();
+}
+
+function exposureString(value: unknown): string | undefined {
+  const result = asNumber(value);
+  if (!result) return undefined;
+  if (result >= 1) return Number.isInteger(result) ? result.toFixed(0) : result.toString();
+  return `1/${Math.round(1 / result)}`;
+}
+
+function dateInputString(value: unknown): string | undefined {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return undefined;
+  const pad = (part: number) => part.toString().padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function formatAperture(value?: string) {
+  if (!value) return "f/—";
+  return value.toLowerCase().startsWith("f/") ? value : `f/${value}`;
+}
+
+function formatExposure(value?: string) {
+  if (!value) return "—s";
+  return value.toLowerCase().endsWith("s") ? value : `${value}s`;
+}
+
+function formatFocal(value?: string) {
+  if (!value) return "—mm";
+  return value.toLowerCase().endsWith("mm") ? value : `${value}mm`;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "日期未知";
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s)(\d{2}):(\d{2})/);
+  return match ? `${match[1]}.${match[2]}.${match[3]} ${match[4]}:${match[5]}` : value;
+}
+
+function brandInfo(make?: string, model?: string): BrandDefinition {
+  // A user-selected EXIF Make is authoritative. Only fall back to Model when Make
+  // is empty or unrecognized, otherwise an old model name could override the selection.
+  const normalizedMake = (make || "").toUpperCase();
+  const normalizedModel = (model || "").toUpperCase();
+  return brands.find((brand) => brand.keywords.some((keyword) => normalizedMake.includes(keyword)))
+    || brands.find((brand) => brand.keywords.some((keyword) => normalizedModel.includes(keyword)))
+    || {
+    value: clean(make) || clean(model) || "CAMERA",
+    label: clean(make) || clean(model) || "CAMERA",
+    keywords: [],
+    color: "#111111",
+  };
+}
+
+function catalogInfo(catalog: BrandDefinition[], value: string): BrandDefinition {
+  const normalized = value.toUpperCase();
+  return catalog.find((brand) => brand.value === value || brand.keywords.some((keyword) => normalized.includes(keyword))) || {
+    value: clean(value) || "CUSTOM",
+    label: clean(value) || "CUSTOM",
+    keywords: [],
+    color: "#111111",
+  };
+}
+
+function currentLayoutKey(settings: Settings): LayoutKey {
+  return settings.filmMode ? `film-mode-${settings.preset}` : settings.preset;
+}
+
+function elementTransform(settings: Settings, element: ElementId): ElementTransform {
+  return settings.transforms[currentLayoutKey(settings)]?.[element] || defaultTransform;
+}
+
+function elementPoint(settings: Settings, layout: Layout, element: ElementId, x: number, y: number) {
+  const transform = elementTransform(settings, element);
+  return {
+    x: x + transform.x * layout.width,
+    y: y + transform.y * layout.height,
+    scale: transform.scale,
+    fontScale: transform.fontScale,
+  };
+}
+
+function font(size: number, weight = 500, family = 'Arial, "PingFang SC", sans-serif') {
+  return `${weight} ${Math.max(8, Math.round(size))}px ${family}`;
+}
+
+function drawTextFit(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  size: number,
+  options: { weight?: number; align?: CanvasTextAlign; color?: string; family?: string } = {},
+) {
+  let currentSize = size;
+  context.textAlign = options.align || "left";
+  context.fillStyle = options.color || "#111111";
+  context.font = font(currentSize, options.weight || 500, options.family);
+  while (context.measureText(text).width > maxWidth && currentSize > size * 0.58) {
+    currentSize -= 1;
+    context.font = font(currentSize, options.weight || 500, options.family);
+  }
+  context.fillText(text, x, y);
+}
+
+function drawElementText(
+  context: CanvasRenderingContext2D,
+  settings: Settings,
+  layout: Layout,
+  element: ElementId,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  size: number,
+  options: { weight?: number; align?: CanvasTextAlign; color?: string; family?: string } = {},
+) {
+  const point = elementPoint(settings, layout, element, x, y);
+  const renderedWidth = maxWidth * point.scale;
+  const renderedHeight = Math.max(18, size * point.fontScale * 1.7);
+  const align = options.align || "left";
+  const boundsX = align === "center" ? point.x - renderedWidth / 2 : align === "right" ? point.x - renderedWidth : point.x;
+  recordElementBounds(element, { x: boundsX, y: point.y - renderedHeight / 2, width: renderedWidth, height: renderedHeight });
+  drawTextFit(context, text, point.x, point.y, renderedWidth, size * point.fontScale, options);
+}
+
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.arcTo(x + width, y, x + width, y + height, r);
+  context.arcTo(x + width, y + height, x, y + height, r);
+  context.arcTo(x, y + height, x, y, r);
+  context.arcTo(x, y, x + width, y, r);
+  context.closePath();
+}
+
+function themePalette(preset: PresetId): ThemePalette | undefined {
+  if (preset === "kodak") {
+    return {
+      background: "#ffffff",
+      ink: "#111111",
+      muted: "#5f625f",
+      faint: "#8b8d85",
+      accent: "#ED0000",
+    };
+  }
+  if (preset === "fujifilm") {
+    return {
+      background: "#ffffff",
+      ink: "#111111",
+      muted: "#5f625f",
+      faint: "#8b8d85",
+      accent: "#01916D",
+    };
+  }
+  return undefined;
+}
+
+function drawThemeRules(context: CanvasRenderingContext2D, layout: Layout, theme: ThemePalette, preset: PresetId) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  context.save();
+  context.fillStyle = theme.background;
+  context.fillRect(x, y, width, height);
+  const stripeHeight = Math.max(6, layout.photoHeight * 0.014);
+  const splitX = x + width * 0.287;
+  if (preset === "kodak") {
+    context.fillStyle = "#FFB700";
+    context.fillRect(x, y, splitX - x, stripeHeight);
+    context.fillStyle = "#ED0000";
+    context.fillRect(splitX, y, x + width - splitX, stripeHeight);
+  } else {
+    context.fillStyle = "#01916D";
+    context.fillRect(x, y, splitX - x, stripeHeight);
+    context.fillStyle = "#99D3C5";
+    context.fillRect(splitX, y, x + width - splitX, stripeHeight);
+  }
+  context.restore();
+}
+
+function drawLogoDefinition(
+  context: CanvasRenderingContext2D,
+  brand: BrandDefinition,
+  x: number,
+  y: number,
+  maxWidth: number,
+  height: number,
+  inverse = false,
+) {
+  const image = logoCache.get(brand.value);
+  context.save();
+  context.textBaseline = "middle";
+
+  if (image?.naturalWidth && image?.naturalHeight) {
+    const maxHeight = height * (brand.value === "Nikon" || brand.value === "Leica Camera AG" ? 0.58 : 0.38);
+    const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    const drawY = y - drawHeight / 2;
+
+    if (brand.monochrome) {
+      const mask = document.createElement("canvas");
+      mask.width = Math.max(1, Math.round(drawWidth));
+      mask.height = Math.max(1, Math.round(drawHeight));
+      const maskContext = mask.getContext("2d");
+      if (maskContext) {
+        maskContext.drawImage(image, 0, 0, mask.width, mask.height);
+        if (brand.value === "LUCKY") {
+          const pixels = maskContext.getImageData(0, 0, mask.width, mask.height);
+          for (let index = 0; index < pixels.data.length; index += 4) {
+            if (pixels.data[index] > 245 && pixels.data[index + 1] > 245 && pixels.data[index + 2] > 245) pixels.data[index + 3] = 0;
+          }
+          maskContext.putImageData(pixels, 0, 0);
+        }
+        maskContext.globalCompositeOperation = "source-in";
+        maskContext.fillStyle = inverse ? "#ffffff" : "#111111";
+        maskContext.fillRect(0, 0, mask.width, mask.height);
+        context.drawImage(mask, x, drawY, drawWidth, drawHeight);
+      }
+    } else {
+      if (inverse) {
+        const padding = Math.max(4, drawHeight * 0.12);
+        roundedRect(context, x - padding, drawY - padding, drawWidth + padding * 2, drawHeight + padding * 2, padding * 0.6);
+        context.fillStyle = "rgba(255,255,255,.96)";
+        context.fill();
+      }
+      context.drawImage(image, x, drawY, drawWidth, drawHeight);
+    }
+  } else {
+    drawTextFit(context, brand.label, x, y, maxWidth, height * 0.24, {
+      weight: 800,
+      color: inverse ? "#ffffff" : brand.color || "#111111",
+    });
+  }
+  context.restore();
+}
+
+function drawBrand(
+  context: CanvasRenderingContext2D,
+  make: string | undefined,
+  model: string | undefined,
+  x: number,
+  y: number,
+  maxWidth: number,
+  height: number,
+  inverse = false,
+) {
+  drawLogoDefinition(context, brandInfo(make, model), x, y, maxWidth, height, inverse);
+}
+
+function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
+  const photoWidth = Math.max(1, Math.round(photo.width * scale));
+  const photoHeight = Math.max(1, Math.round(photo.height * scale));
+  const activeBandSize = settings.filmMode ? settings.filmBandSize : settings.bandSize;
+  const baseBand = Math.max(72, Math.round(photoHeight * (activeBandSize / 100)));
+
+  if (settings.preset === "gallery") {
+    const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.025));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin * 2 + baseBand,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: photoHeight + margin,
+      bandWidth: photoWidth,
+      bandHeight: baseBand + margin,
+    };
+  }
+
+  if (settings.preset === "overlay") {
+    return {
+      width: photoWidth,
+      height: photoHeight,
+      photoX: 0,
+      photoY: 0,
+      photoWidth,
+      photoHeight,
+      bandX: 0,
+      bandY: photoHeight - baseBand,
+      bandWidth: photoWidth,
+      bandHeight: baseBand,
+    };
+  }
+
+  return {
+    width: photoWidth,
+    height: photoHeight + baseBand,
+    photoX: 0,
+    photoY: 0,
+    photoWidth,
+    photoHeight,
+    bandX: 0,
+    bandY: photoHeight,
+    bandWidth: photoWidth,
+    bandHeight: baseBand,
+  };
+}
+
+function drawStandardBand(
+  context: CanvasRenderingContext2D,
+  photo: PhotoItem,
+  settings: Settings,
+  layout: Layout,
+  inverse = false,
+  theme?: ThemePalette,
+) {
+  const { bandX: x, bandY: baseY, bandWidth: width, bandHeight: height } = layout;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const contentOffsetY = theme ? contentHeight * 0.055 : 0;
+  const y = baseY + contentOffsetY;
+  const ink = theme?.ink || (inverse ? "#f7f7f3" : "#111111");
+  const muted = theme?.muted || (inverse ? "rgba(255,255,255,.68)" : "#5f625f");
+  const meta = photo.metadata;
+  context.save();
+  context.textBaseline = "middle";
+
+  if (settings.showBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.032, y + height * 0.5);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.28 * point.scale, width: width * 0.18 * point.scale, height: contentHeight * 0.56 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.18 * point.scale, contentHeight * point.scale, inverse);
+  }
+
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "相机型号未知", x + width * 0.28, y + height * 0.32, width * 0.16, contentHeight * 0.16, { color: ink, weight: 650 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.45, y + height * 0.32, width * 0.25, contentHeight * 0.13, { color: muted, weight: 400 });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.32, y + height * 0.72, width * 0.08, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.41, y + height * 0.72, width * 0.08, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.5, y + height * 0.72, width * 0.09, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.6, y + height * 0.72, width * 0.09, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
+
+  const right = x + width * 0.968;
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * 0.32, width * 0.25, contentHeight * 0.14, { align: "right", color: ink, weight: 500 });
+  if (settings.showDate) {
+    drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), right, y + height * 0.72, width * 0.27, contentHeight * 0.13, { align: "right", color: muted, weight: 400 });
+  }
+  context.restore();
+}
+
+function drawFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const meta = photo.metadata;
+  const left = x + width * 0.035;
+  const right = x + width * 0.965;
+  context.save();
+  context.textBaseline = "middle";
+  context.fillStyle = "#10100f";
+  context.fillRect(x, y, width, height);
+  if (settings.showBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", left, y + height * 0.22);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.2 * point.scale, width: width * 0.18 * point.scale, height: contentHeight * 0.4 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.18 * point.scale, contentHeight * 0.62 * point.scale, true);
+  }
+  context.fillStyle = "#d8ff42";
+  context.fillRect(left + width * 0.2, y + height * 0.2, width * 0.026, Math.max(3, contentHeight * 0.025));
+  drawTextFit(context, "FRAME  ·  01", left + width * 0.235, y + height * 0.21, width * 0.12, contentHeight * 0.105, {
+    color: "#d8ff42",
+    weight: 700,
+  });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), left, y + height * 0.65, width * 0.22, contentHeight * 0.28, { color: "#ffffff", weight: 400 });
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "UNKNOWN CAMERA", x + width * 0.36, y + height * 0.35, width * 0.34, contentHeight * 0.15, { color: "#ffffff", weight: 600 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.36, y + height * 0.58, width * 0.38, contentHeight * 0.105, { color: "rgba(255,255,255,.6)", weight: 400 });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.36, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.47, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.58, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
+  drawTextFit(context, photo.file.name.toUpperCase(), right, y + height * 0.37, width * 0.26, contentHeight * 0.1, {
+    align: "right",
+    color: "rgba(255,255,255,.68)",
+    weight: 600,
+  });
+  if (settings.showDate) {
+    drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), right, y + height * 0.66, width * 0.27, contentHeight * 0.12, { align: "right", color: "#ffffff", weight: 400 });
+  }
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * 0.86, width * 0.26, contentHeight * 0.105, { align: "right", color: "rgba(255,255,255,.62)", weight: 500 });
+  context.restore();
+}
+
+function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout, inverse = false, theme?: ThemePalette) {
+  const { bandX: x, bandY: baseY, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.filmMetadata;
+  // Keep visual sizes anchored to the former 16.12% nameplate. Changing the
+  // nameplate height only redistributes the row positions.
+  const contentHeight = layout.photoHeight * 0.1612;
+  const contentOffsetY = theme ? contentHeight * 0.055 : 0;
+  const y = baseY + contentOffsetY;
+  const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
+  const scannerBrand = catalogInfo(scannerBrands, settings.scannerBrand);
+  const ink = theme?.ink || (inverse ? "#ffffff" : "#111111");
+  const muted = theme?.muted || (inverse ? "rgba(255,255,255,.62)" : "#62655d");
+  const faint = theme?.faint || (inverse ? "rgba(255,255,255,.46)" : "#8b8d85");
+  const accent = theme?.accent || (inverse ? "#d7ef3d" : "#758514");
+  const cameraLogoX = x + width * 0.035;
+  const detailsPrimaryX = x + width * 0.205;
+  const detailsSecondaryX = x + width * 0.39;
+  const scannerLogoX = x + width * 0.59;
+  const scannerModelX = x + width * 0.79;
+  const filmLogoX = x + width * 0.035;
+  const filmNameX = detailsPrimaryX;
+  const filmIsoX = detailsSecondaryX;
+  const labLabelX = x + width * 0.59;
+  const labNameX = x + width * 0.79;
+  const topRow = y + height * 0.29;
+  const bottomRow = y + height * 0.69;
+  const optionalRow = y + height * 0.91;
+  context.save();
+  context.textBaseline = "middle";
+
+  if (settings.filmShowBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", cameraLogoX, topRow);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.145 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.145 * point.scale, contentHeight * 0.76 * point.scale, inverse);
+  }
+  if (settings.showFilmBrand) {
+    const point = elementPoint(settings, layout, "filmBrand", filmLogoX, bottomRow);
+    recordElementBounds("filmBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.1 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.1 * point.scale, contentHeight * 0.62 * point.scale, inverse);
+  }
+  if (settings.showScanner) {
+    const point = elementPoint(settings, layout, "scanner", scannerLogoX, topRow);
+    recordElementBounds("scanner", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.17 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, scannerBrand, point.x, point.y, width * 0.17 * point.scale, contentHeight * 0.7 * point.scale, inverse);
+    drawElementText(context, settings, layout, "scanner", settings.scannerName || "FILM SCANNER", scannerModelX, topRow, width * 0.17, contentHeight * 0.145, { color: ink, weight: 650 });
+  }
+  if (settings.showLab) {
+    drawElementText(context, settings, layout, "lab", "DEVELOPED BY", labLabelX, bottomRow, width * 0.17, contentHeight * 0.115, { color: faint, weight: 700 });
+    drawElementText(context, settings, layout, "lab", settings.labName || "YOUR FILM LAB", labNameX, bottomRow, width * 0.17, contentHeight * 0.15, { color: ink, weight: 600 });
+  }
+
+  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", detailsPrimaryX, topRow, width * 0.16, contentHeight * 0.15, { color: ink, weight: 650 });
+  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, detailsSecondaryX, topRow, width * 0.15, contentHeight * 0.125, { color: muted, weight: 450 });
+  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", filmNameX, bottomRow, width * 0.135, contentHeight * 0.15, { color: ink, weight: 700 });
+  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, filmIsoX, bottomRow, width * 0.09, contentHeight * 0.125, { color: muted, weight: 550 });
+
+  if (settings.filmShowAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), cameraLogoX, optionalRow, width * 0.08, contentHeight * 0.095, { color: accent, weight: 600 });
+  if (settings.filmShowExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), cameraLogoX + width * 0.09, optionalRow, width * 0.08, contentHeight * 0.095, { color: accent, weight: 600 });
+  if (settings.filmShowFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), cameraLogoX + width * 0.18, optionalRow, width * 0.07, contentHeight * 0.095, { color: accent, weight: 600 });
+  if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), scannerLogoX, optionalRow, width * 0.2, contentHeight * 0.085, { color: faint, weight: 400 });
+  if (settings.filmShowSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.97, optionalRow, width * 0.2, contentHeight * 0.085, { align: "right", color: muted, weight: 500 });
+  context.restore();
+}
+
+function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, collectBounds = false): RenderedPhoto {
+  const fullLayout = getLayout(photo, settings, 1);
+  const scale = maxEdge ? Math.min(1, maxEdge / Math.max(fullLayout.width, fullLayout.height)) : 1;
+  const layout = getLayout(photo, settings, scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = layout.width;
+  canvas.height = layout.height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("浏览器无法创建绘图画布");
+  const bounds: ElementBoundsMap = {};
+  collectingElementBounds = collectBounds ? bounds : null;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  const theme = themePalette(settings.preset);
+  const background = theme?.background || (settings.preset === "noir" || settings.preset === "film" ? "#10100f" : settings.preset === "gallery" ? "#f2efe7" : "#ffffff");
+  context.fillStyle = background;
+  context.fillRect(0, 0, layout.width, layout.height);
+  context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
+
+  if (settings.preset === "overlay") {
+    const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.35, 0, layout.bandY + layout.bandHeight);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(0.42, "rgba(0,0,0,.30)");
+    gradient.addColorStop(1, "rgba(0,0,0,.78)");
+    context.fillStyle = gradient;
+    context.fillRect(0, layout.bandY - layout.bandHeight * 0.35, layout.width, layout.bandHeight * 1.35);
+    context.shadowColor = "rgba(0,0,0,.35)";
+    context.shadowBlur = Math.max(2, layout.bandHeight * 0.02);
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, true);
+    else drawStandardBand(context, photo, settings, layout, true);
+    context.shadowBlur = 0;
+  } else if (settings.preset === "film") {
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, true);
+    else drawFilmBand(context, photo, settings, layout);
+  } else {
+    if (settings.preset === "gallery") {
+      context.fillStyle = "rgba(30,30,25,.15)";
+      context.fillRect(layout.bandX, layout.bandY, layout.bandWidth, Math.max(1, layout.bandHeight * 0.004));
+    }
+    if (theme) drawThemeRules(context, layout, theme, settings.preset);
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, settings.preset === "noir", theme);
+    else drawStandardBand(context, photo, settings, layout, settings.preset === "noir", theme);
+  }
+  collectingElementBounds = null;
+  return { canvas, bounds };
+}
+
+function drawSelectionOverlay(context: CanvasRenderingContext2D, bounds?: ElementBounds) {
+  if (!bounds) return;
+  const padding = Math.max(4, context.canvas.width * 0.0035);
+  const handle = Math.max(9, context.canvas.width * 0.008);
+  const x = bounds.x - padding;
+  const y = bounds.y - padding;
+  const width = bounds.width + padding * 2;
+  const height = bounds.height + padding * 2;
+  context.save();
+  context.strokeStyle = "#b8d126";
+  context.fillStyle = "#ffffff";
+  context.lineWidth = Math.max(2, context.canvas.width * 0.0015);
+  context.setLineDash([context.lineWidth * 3, context.lineWidth * 2]);
+  context.strokeRect(x, y, width, height);
+  context.setLineDash([]);
+  for (const [handleX, handleY] of [[x, y], [x + width, y], [x, y + height], [x + width, y + height]]) {
+    context.fillRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
+    context.strokeRect(handleX - handle / 2, handleY - handle / 2, handle, handle);
+  }
+  context.restore();
+}
+
+async function readPhoto(file: File): Promise<PhotoItem> {
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+  try {
+    await image.decode();
+    const raw = await exifr.parse(file, {
+      pick: [
+        "Make",
+        "Model",
+        "LensModel",
+        "FNumber",
+        "ExposureTime",
+        "ISO",
+        "ISOSpeedRatings",
+        "PhotographicSensitivity",
+        "FocalLength",
+        "DateTimeOriginal",
+        "CreateDate",
+      ],
+    }).catch(() => undefined);
+    const metadata: PhotoMetadata = {
+      make: clean(raw?.Make),
+      model: clean(raw?.Model),
+      lens: clean(raw?.LensModel),
+      aperture: numberString(raw?.FNumber),
+      exposure: exposureString(raw?.ExposureTime),
+      iso: numberString(raw?.ISO ?? raw?.ISOSpeedRatings ?? raw?.PhotographicSensitivity),
+      focalLength: numberString(raw?.FocalLength),
+      takenAt: dateInputString(raw?.DateTimeOriginal instanceof Date ? raw.DateTimeOriginal : raw?.CreateDate),
+    };
+    return {
+      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      file,
+      url,
+      image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      metadata,
+      filmMetadata: { ...defaultFilmMetadata },
+      autoMetadata: { ...metadata },
+    };
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
+  }
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, format: ExportFormat) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("图片编码失败"))),
+      format === "png" ? "image/png" : "image/jpeg",
+      format === "jpeg" ? 1 : undefined,
+    );
+  });
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function outputName(file: File, format: ExportFormat) {
+  const stem = file.name.replace(/\.[^.]+$/, "");
+  return `${stem}_photon-frame.${format === "png" ? "png" : "jpg"}`;
+}
+
+function editableValueForElement(element: ElementId, photo: PhotoItem | undefined, settings: Settings): string | undefined {
+  if (element === "signature") return settings.signature;
+  if (element === "filmName") return settings.filmName;
+  if (element === "lab") return settings.labName;
+  if (element === "scanner") return settings.scannerName;
+  if (!photo) return undefined;
+  const fieldMap: Partial<Record<ElementId, keyof PhotoMetadata>> = {
+    cameraModel: "model",
+    lens: "lens",
+    aperture: "aperture",
+    exposure: "exposure",
+    iso: "iso",
+    focalLength: "focalLength",
+    date: "takenAt",
+  };
+  const field = fieldMap[element];
+  const metadata = settings.filmMode ? photo.filmMetadata : photo.metadata;
+  return field ? metadata[field] || "" : undefined;
+}
+
+export default function Home() {
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [logosReady, setLogosReady] = useState(false);
+  const [settings, setSettings] = useState<Settings>({
+    preset: "classic",
+    bandSize: 12,
+    filmBandSize: 12,
+    signature: "你的名字",
+    showSignature: true,
+    showBrand: true,
+    showModel: true,
+    showDate: true,
+    showLens: true,
+    showAperture: true,
+    showExposure: true,
+    showIso: true,
+    showFocalLength: true,
+    filmMode: false,
+    filmShowSignature: false,
+    filmShowBrand: true,
+    filmShowModel: true,
+    filmShowDate: false,
+    filmShowLens: true,
+    filmShowAperture: false,
+    filmShowExposure: false,
+    filmShowIso: true,
+    filmShowFocalLength: false,
+    filmBrand: "KODAK",
+    filmName: "EKTAR100",
+    labName: "我的冲洗店",
+    scannerBrand: "NORITSU",
+    scannerName: "HS-1800",
+    showFilmBrand: true,
+    showFilmName: true,
+    showLab: true,
+    showScanner: true,
+    transforms: {},
+    format: "png",
+  });
+  const [activeElement, setActiveElement] = useState<ElementId>("cameraBrand");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const elementEditorInputRef = useRef<HTMLInputElement>(null);
+  const elementBoundsRef = useRef<ElementBoundsMap>({});
+  const elementDragRef = useRef<{
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    element: ElementId;
+    mode: "move" | "resize";
+    resizeCorner?: "nw" | "ne" | "sw" | "se";
+    origin: ElementTransform;
+  } | null>(null);
+  const selected = photos.find((photo) => photo.id === selectedId) || photos[0];
+  const selectedMetadata = selected ? (settings.filmMode ? selected.filmMetadata : selected.metadata) : undefined;
+  const selectedBrand = selectedMetadata ? brandInfo(selectedMetadata.make, selectedMetadata.model) : undefined;
+  const selectedHasExif = selected ? Object.values(selected.autoMetadata).some(Boolean) : false;
+  const editableElements = settings.filmMode ? filmElementIds : standardElementIds;
+  const activeTransform = elementTransform(settings, activeElement);
+  const activeEditableValue = editableValueForElement(activeElement, selected, settings);
+
+  const outputLayout = useMemo(() => (selected ? getLayout(selected, settings, 1) : null), [selected, settings]);
+
+  useEffect(() => {
+    void preloadOfficialLogos().then(() => setLogosReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!selected || !previewRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      try {
+        const rendered = renderPhoto(selected, settings, 1600, true);
+        const preview = previewRef.current;
+        if (!preview) return;
+        preview.width = rendered.canvas.width;
+        preview.height = rendered.canvas.height;
+        const context = preview.getContext("2d");
+        elementBoundsRef.current = rendered.bounds;
+        if (context) {
+          context.drawImage(rendered.canvas, 0, 0);
+          drawSelectionOverlay(context, rendered.bounds[activeElement]);
+        }
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "预览生成失败");
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected, settings, logosReady, activeElement]);
+
+  async function addFiles(fileList: FileList | File[]) {
+    setError("");
+    const candidates = Array.from(fileList).filter((file) => acceptedTypes.has(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name));
+    if (!candidates.length) {
+      setError("请选择 JPEG、PNG 或 WebP 图片。相机原片建议使用 JPEG，以便读取完整 EXIF。 ");
+      return;
+    }
+    setBusy(`正在读取 ${candidates.length} 张照片…`);
+    const results = await Promise.allSettled(candidates.map(readPhoto));
+    const loaded = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+    if (loaded.length) {
+      setPhotos((current) => [...current, ...loaded]);
+      setSelectedId((current) => current || loaded[0].id);
+    }
+    if (loaded.length !== candidates.length) setError(`${candidates.length - loaded.length} 张照片无法读取，已跳过。`);
+    setBusy("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleInput(event: ChangeEvent<HTMLInputElement>) {
+    if (event.target.files) void addFiles(event.target.files);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    if (event.dataTransfer.files.length) void addFiles(event.dataTransfer.files);
+  }
+
+  function removePhoto(id: string) {
+    const target = photos.find((photo) => photo.id === id);
+    if (target) URL.revokeObjectURL(target.url);
+    const remaining = photos.filter((photo) => photo.id !== id);
+    setPhotos(remaining);
+    if (selectedId === id) setSelectedId(remaining[0]?.id || null);
+  }
+
+  function updateSelectedMetadata(field: keyof PhotoMetadata, value: string) {
+    if (!selected) return;
+    setPhotos((current) => current.map((photo) => photo.id === selected.id
+      ? settings.filmMode
+        ? { ...photo, filmMetadata: { ...photo.filmMetadata, [field]: value } }
+        : { ...photo, metadata: { ...photo.metadata, [field]: value } }
+      : photo));
+  }
+
+  function resetSelectedMetadata() {
+    if (!selected) return;
+    setPhotos((current) => current.map((photo) => photo.id === selected.id
+      ? settings.filmMode
+        ? { ...photo, filmMetadata: { ...defaultFilmMetadata } }
+        : { ...photo, metadata: { ...photo.autoMetadata } }
+      : photo));
+  }
+
+  function updateElementTransform(element: ElementId, patch: Partial<ElementTransform>) {
+    setSettings((current) => {
+      const key = currentLayoutKey(current);
+      const previous = current.transforms[key]?.[element] || defaultTransform;
+      return {
+        ...current,
+        transforms: {
+          ...current.transforms,
+          [key]: {
+            ...current.transforms[key],
+            [element]: { ...previous, ...patch },
+          },
+        },
+      };
+    });
+  }
+
+  function resetActiveElement() {
+    updateElementTransform(activeElement, defaultTransform);
+  }
+
+  function resetCurrentLayout() {
+    setSettings((current) => {
+      const key = currentLayoutKey(current);
+      const nextTransforms = { ...current.transforms };
+      delete nextTransforms[key];
+      return { ...current, transforms: nextTransforms };
+    });
+  }
+
+  function canvasPoint(event: ReactPointerEvent<HTMLCanvasElement> | ReactMouseEvent<HTMLCanvasElement>) {
+    const rectangle = event.currentTarget.getBoundingClientRect();
+    return {
+      x: (event.clientX - rectangle.left) * (event.currentTarget.width / Math.max(1, rectangle.width)),
+      y: (event.clientY - rectangle.top) * (event.currentTarget.height / Math.max(1, rectangle.height)),
+    };
+  }
+
+  function elementAtPoint(point: { x: number; y: number }) {
+    return [...editableElements].reverse().find((element) => {
+      const bounds = elementBoundsRef.current[element];
+      return bounds && point.x >= bounds.x && point.x <= bounds.x + bounds.width && point.y >= bounds.y && point.y <= bounds.y + bounds.height;
+    });
+  }
+
+  function updateActiveElementText(value: string) {
+    if (["cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "date"].includes(activeElement)) {
+      const fieldMap: Record<string, keyof PhotoMetadata> = { cameraModel: "model", lens: "lens", aperture: "aperture", exposure: "exposure", iso: "iso", focalLength: "focalLength", date: "takenAt" };
+      updateSelectedMetadata(fieldMap[activeElement], value);
+      return;
+    }
+    if (activeElement === "signature") setSettings((current) => ({ ...current, signature: value }));
+    if (activeElement === "filmName") setSettings((current) => ({ ...current, filmName: value }));
+    if (activeElement === "lab") setSettings((current) => ({ ...current, labName: value }));
+    if (activeElement === "scanner") setSettings((current) => ({ ...current, scannerName: value }));
+  }
+
+  function handleElementPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (!selected) return;
+    const point = canvasPoint(event);
+    const activeBounds = elementBoundsRef.current[activeElement];
+    const handleRadius = Math.max(12, event.currentTarget.width * 0.015);
+    const resizeCorner = activeBounds ? ([
+      ["nw", activeBounds.x, activeBounds.y],
+      ["ne", activeBounds.x + activeBounds.width, activeBounds.y],
+      ["sw", activeBounds.x, activeBounds.y + activeBounds.height],
+      ["se", activeBounds.x + activeBounds.width, activeBounds.y + activeBounds.height],
+    ] as const).find(([, x, y]) => Math.abs(point.x - x) <= handleRadius && Math.abs(point.y - y) <= handleRadius)?.[0] : undefined;
+    const element = resizeCorner ? activeElement : elementAtPoint(point);
+    if (!element) return;
+    event.preventDefault();
+    setActiveElement(element);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    elementDragRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      element,
+      mode: resizeCorner ? "resize" : "move",
+      resizeCorner,
+      origin: { ...elementTransform(settings, element) },
+    };
+  }
+
+  function handleElementPointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const drag = elementDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const width = Math.max(1, event.currentTarget.clientWidth);
+    const height = Math.max(1, event.currentTarget.clientHeight);
+    if (drag.mode === "resize") {
+      const horizontalDirection = drag.resizeCorner?.includes("w") ? -1 : 1;
+      const verticalDirection = drag.resizeCorner?.includes("n") ? -1 : 1;
+      const delta = ((event.clientX - drag.clientX) / width) * horizontalDirection + ((event.clientY - drag.clientY) / height) * verticalDirection;
+      const factor = Math.max(0.25, Math.min(4, 1 + delta * 1.8));
+      updateElementTransform(drag.element, {
+        scale: Math.max(0.35, Math.min(3, drag.origin.scale * factor)),
+        fontScale: Math.max(0.35, Math.min(3, drag.origin.fontScale * factor)),
+      });
+    } else {
+      const x = Math.max(-0.75, Math.min(0.75, drag.origin.x + (event.clientX - drag.clientX) / width));
+      const y = Math.max(-0.75, Math.min(0.75, drag.origin.y + (event.clientY - drag.clientY) / height));
+      updateElementTransform(drag.element, { x, y });
+    }
+  }
+
+  function handleElementPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (elementDragRef.current?.pointerId !== event.pointerId) return;
+    elementDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function handleElementDoubleClick(event: ReactMouseEvent<HTMLCanvasElement>) {
+    const element = elementAtPoint(canvasPoint(event));
+    if (!element) return;
+    setActiveElement(element);
+    requestAnimationFrame(() => elementEditorInputRef.current?.focus());
+  }
+
+  async function exportCurrent() {
+    if (!selected) return;
+    setError("");
+    setBusy("正在生成原尺寸图片…");
+    try {
+      await preloadOfficialLogos();
+      const canvas = renderPhoto(selected, settings).canvas;
+      const blob = await canvasToBlob(canvas, settings.format);
+      downloadBlob(blob, outputName(selected.file, settings.format));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "导出失败");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function exportBatch() {
+    if (!photos.length) return;
+    setError("");
+    setBusy(`正在生成 1 / ${photos.length}…`);
+    try {
+      await preloadOfficialLogos();
+      const zip = new JSZip();
+      for (let index = 0; index < photos.length; index += 1) {
+        const photo = photos[index];
+        setBusy(`正在生成 ${index + 1} / ${photos.length}…`);
+        const canvas = renderPhoto(photo, settings).canvas;
+        const blob = await canvasToBlob(canvas, settings.format);
+        zip.file(outputName(photo.file, settings.format), blob);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      setBusy("正在打包…");
+      const archive = await zip.generateAsync({ type: "blob", compression: "STORE" });
+      downloadBlob(archive, "photon-frame-exports.zip");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "批量导出失败");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <a className="brand-lockup" href="#top" aria-label="Photon Frame 首页">
+          <span className="brand-glyph" aria-hidden="true"><i /><b /></span>
+          <span><strong>Photon Frame</strong><small>光子水印</small></span>
+        </a>
+        <div className="privacy-note"><span aria-hidden="true">●</span> 本地处理 · 照片不会上传</div>
+        <button className="header-action" type="button" onClick={() => fileInputRef.current?.click()}>＋ 添加照片</button>
+      </header>
+
+      <section className="intro" id="top">
+        <div>
+          <p className="eyebrow">PHOTO SIGNATURE STUDIO</p>
+          <h1>让参数成为照片的<br /><em>最后一笔。</em></h1>
+        </div>
+        <p className="intro-copy">自动读取相机、镜头、光圈、快门、ISO、焦距与拍摄时间。原图不缩放，导出完整分辨率。</p>
+      </section>
+
+      <input ref={fileInputRef} className="visually-hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={handleInput} />
+
+      <section className="studio" aria-label="水印工作台">
+        <aside className="photo-rail">
+          <div className="section-heading"><span>照片</span><small>{photos.length || "0"}</small></div>
+          {photos.length ? (
+            <div className="photo-list">
+              {photos.map((photo, index) => (
+                <div className={`photo-item ${selected?.id === photo.id ? "active" : ""}`} key={photo.id}>
+                  <button className="photo-select" type="button" onClick={() => setSelectedId(photo.id)} aria-label={`选择 ${photo.file.name}`}>
+                    {/* Blob URLs are local previews and intentionally bypass remote image optimization. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="" />
+                    <span><b>{String(index + 1).padStart(2, "0")}</b><small>{photo.metadata.model || photo.file.name}</small></span>
+                  </button>
+                  <button className="photo-remove" type="button" aria-label={`移除 ${photo.file.name}`} onClick={() => removePhoto(photo.id)}>×</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rail-empty">添加照片后，可在这里快速切换并批量导出。</p>
+          )}
+          <button className="rail-add" type="button" onClick={() => fileInputRef.current?.click()}>＋ 添加更多照片</button>
+        </aside>
+
+        <div
+          className={`preview-stage ${isDragging ? "dragging" : ""}`}
+          onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDragging(false); }}
+          onDrop={handleDrop}
+        >
+          {selected ? (
+            <>
+              <div className="preview-toolbar">
+                <span><b>{selected.file.name}</b><small>{selected.width} × {selected.height}</small></span>
+                <span className={`exif-state ${selectedHasExif ? "" : "manual"}`}><i /> {selectedHasExif ? "EXIF 已读取" : "等待手动填写"}</span>
+              </div>
+              <div className="canvas-wrap">
+                <canvas
+                  ref={previewRef}
+                  className="editable-canvas"
+                  aria-label={`水印预览；拖动可移动${elementLabels[activeElement]}`}
+                  title={`拖动以移动：${elementLabels[activeElement]}`}
+                  onPointerDown={handleElementPointerDown}
+                  onPointerMove={handleElementPointerMove}
+                  onPointerUp={handleElementPointerUp}
+                  onPointerCancel={handleElementPointerUp}
+                  onDoubleClick={handleElementDoubleClick}
+                />
+              </div>
+              <div className="dimension-bar">
+                <span>原图 <b>{selected.width} × {selected.height}</b></span>
+                <span className="dimension-arrow" aria-hidden="true">→</span>
+                <span>导出 <b>{outputLayout?.width} × {outputLayout?.height}</b></span>
+                <span className="lossless-mark">原像素保留</span>
+              </div>
+            </>
+          ) : (
+            <button className="drop-zone" type="button" onClick={() => fileInputRef.current?.click()}>
+              <span className="drop-visual" aria-hidden="true"><i /><b>＋</b></span>
+              <strong>拖入你的照片</strong>
+              <small>或点击选择 JPEG / PNG / WebP</small>
+              <em>相机 JPEG 可读取最完整的拍摄参数</em>
+            </button>
+          )}
+          {isDragging && <div className="drop-overlay">松开即可读取照片</div>}
+        </div>
+
+        <aside className="control-panel">
+          <div className="control-scroll">
+            <div className="section-heading"><span>水印样式</span><small>01</small></div>
+            <div className="preset-grid">
+              {presets.map((preset) => (
+                <button
+                  type="button"
+                  key={preset.id}
+                  className={`preset-card ${settings.preset === preset.id ? "active" : ""}`}
+                  onClick={() => setSettings((current) => ({ ...current, preset: preset.id }))}
+                >
+                  <span className={`preset-swatch ${preset.swatch}`}><i /><b /></span>
+                  <span><strong>{preset.name}</strong><small>{preset.note}</small></span>
+                  {settings.preset === preset.id && <em aria-label="已选择">✓</em>}
+                </button>
+              ))}
+            </div>
+
+            <div className="section-heading sub"><span>内容与尺寸</span><small>02</small></div>
+            <label className="field-label" htmlFor="signature">签名</label>
+            <div className="text-field"><span>by</span><input id="signature" value={settings.signature} maxLength={30} disabled={settings.filmMode ? !settings.filmShowSignature : !settings.showSignature} onChange={(event) => setSettings((current) => ({ ...current, signature: event.target.value }))} /></div>
+
+            <div className="range-heading"><label htmlFor="band-size">{settings.filmMode ? "胶片铭牌高度" : "铭牌高度"}</label><output>{(settings.filmMode ? settings.filmBandSize : settings.bandSize).toFixed(1)}%</output></div>
+            <input id="band-size" className="range" type="range" min="10" max="36" step="0.1" value={settings.filmMode ? settings.filmBandSize : settings.bandSize} onChange={(event) => { const value = Number(event.target.value); setSettings((current) => current.filmMode ? { ...current, filmBandSize: value } : { ...current, bandSize: value }); }} />
+
+            <div className="toggle-list">
+              <label><span><b>显示签名</b><small>在右侧显示 by + 签名</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowSignature : settings.showSignature} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowSignature: checked } : { ...current, showSignature: checked }); }} /><i /></label>
+              <label><span><b>厂商品牌</b><small>根据 EXIF 自动识别</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowBrand : settings.showBrand} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowBrand: checked } : { ...current, showBrand: checked }); }} /><i /></label>
+              <label><span><b>相机型号</b><small>单独控制机型文字</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowModel : settings.showModel} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowModel: checked } : { ...current, showModel: checked }); }} /><i /></label>
+              <label><span><b>焦距</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowFocalLength : settings.showFocalLength} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowFocalLength: checked } : { ...current, showFocalLength: checked }); }} /><i /></label>
+              <label><span><b>ISO</b><small>感光度参数</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowIso : settings.showIso} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowIso: checked } : { ...current, showIso: checked }); }} /><i /></label>
+              <label><span><b>光圈</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowAperture : settings.showAperture} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowAperture: checked } : { ...current, showAperture: checked }); }} /><i /></label>
+              <label><span><b>快门</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowExposure : settings.showExposure} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowExposure: checked } : { ...current, showExposure: checked }); }} /><i /></label>
+              <label><span><b>拍摄日期</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowDate : settings.showDate} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowDate: checked } : { ...current, showDate: checked }); }} /><i /></label>
+              <label><span><b>镜头信息</b><small>镜头型号与规格</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowLens : settings.showLens} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowLens: checked } : { ...current, showLens: checked }); }} /><i /></label>
+              <label className="film-master-toggle"><span><b>胶片信息模式</b><small>加入胶卷、冲洗与扫描信息布局</small></span><input type="checkbox" checked={settings.filmMode} onChange={(event) => { const enabled = event.target.checked; setSettings((current) => ({ ...current, filmMode: enabled })); if (!enabled && !standardElementIds.includes(activeElement)) setActiveElement("cameraBrand"); }} /><i /></label>
+            </div>
+
+            {settings.filmMode && (
+              <div className="film-settings">
+                <div className="metadata-editor-head"><span><b>胶片工作流</b><small>每一项都可单独隐藏并自由排版</small></span></div>
+                <div className="toggle-list compact">
+                  <label><span><b>胶卷厂商 Logo</b></span><input type="checkbox" checked={settings.showFilmBrand} onChange={(event) => setSettings((current) => ({ ...current, showFilmBrand: event.target.checked }))} /><i /></label>
+                  <label><span><b>胶卷名称</b></span><input type="checkbox" checked={settings.showFilmName} onChange={(event) => setSettings((current) => ({ ...current, showFilmName: event.target.checked }))} /><i /></label>
+                  <label><span><b>冲洗店名称</b></span><input type="checkbox" checked={settings.showLab} onChange={(event) => setSettings((current) => ({ ...current, showLab: event.target.checked }))} /><i /></label>
+                  <label><span><b>扫描仪 Logo 与名称</b></span><input type="checkbox" checked={settings.showScanner} onChange={(event) => setSettings((current) => ({ ...current, showScanner: event.target.checked }))} /><i /></label>
+                </div>
+                <div className="film-form-grid">
+                  <label className="metadata-field"><span>胶卷厂商</span><select value={settings.filmBrand} onChange={(event) => setSettings((current) => ({ ...current, filmBrand: event.target.value }))}>{filmBrands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</select></label>
+                  <label className="metadata-field"><span>胶卷名称</span><input value={settings.filmName} placeholder="例如 PORTRA 400" onChange={(event) => setSettings((current) => ({ ...current, filmName: event.target.value }))} /></label>
+                  <label className="metadata-field"><span>冲洗店名称</span><input value={settings.labName} placeholder="完全自定义" onChange={(event) => setSettings((current) => ({ ...current, labName: event.target.value }))} /></label>
+                  <label className="metadata-field"><span>扫描仪厂商</span><select value={settings.scannerBrand} onChange={(event) => setSettings((current) => ({ ...current, scannerBrand: event.target.value }))}>{scannerBrands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</select></label>
+                  <label className="metadata-field full"><span>扫描仪型号</span><input value={settings.scannerName} placeholder="例如 HS-1800 / SP-3000" onChange={(event) => setSettings((current) => ({ ...current, scannerName: event.target.value }))} /></label>
+                </div>
+              </div>
+            )}
+
+            {selected && (
+              <div className="metadata-editor">
+                <div className="metadata-editor-head">
+                  <span><b>照片参数</b><small>{settings.filmMode ? "默认使用胶片参数，可逐张修改" : "默认来自 EXIF，可逐张修改"}</small></span>
+                  <button type="button" onClick={resetSelectedMetadata}>{settings.filmMode ? "恢复胶片默认值" : "恢复自动识别"}</button>
+                </div>
+
+                <div className="brand-editor">
+                  <div className={`brand-logo-preview ${selectedBrand?.monochrome ? "monochrome" : ""}`}>
+                    {selectedBrand?.asset ? (
+                      // Official local brand assets intentionally use a plain image element.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`brands/${selectedBrand.asset}`} alt={`${selectedBrand.label} 官方 Logo`} />
+                    ) : <span>{selectedBrand?.label || "CAMERA"}</span>}
+                  </div>
+                  <label>
+                    <span>厂商选择</span>
+                    <select
+                      value={brands.some((brand) => brand.value === selectedBrand?.value) ? selectedBrand?.value : "__custom__"}
+                      onChange={(event) => updateSelectedMetadata("make", event.target.value === "__custom__" ? "" : event.target.value)}
+                    >
+                      {brands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}
+                      <option value="__custom__">其他 / 自定义</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="metadata-field full">
+                  <span>厂商名称</span>
+                  <input value={selectedMetadata?.make || ""} placeholder="例如 Canon" onChange={(event) => updateSelectedMetadata("make", event.target.value)} />
+                </label>
+                <label className="metadata-field full">
+                  <span>相机型号</span>
+                  <input value={selectedMetadata?.model || ""} placeholder="例如 Canon EOS 700D" onChange={(event) => updateSelectedMetadata("model", event.target.value)} />
+                </label>
+                <label className="metadata-field full">
+                  <span>镜头信息</span>
+                  <input value={selectedMetadata?.lens || ""} placeholder="例如 EF-S18-135mm f/3.5-5.6 IS STM" onChange={(event) => updateSelectedMetadata("lens", event.target.value)} />
+                </label>
+                <div className="metadata-grid">
+                  <label className="metadata-field"><span>光圈</span><input value={selectedMetadata?.aperture || ""} placeholder="5.6" onChange={(event) => updateSelectedMetadata("aperture", event.target.value)} /></label>
+                  <label className="metadata-field"><span>快门</span><input value={selectedMetadata?.exposure || ""} placeholder="1/125" onChange={(event) => updateSelectedMetadata("exposure", event.target.value)} /></label>
+                  <label className="metadata-field"><span>ISO</span><input value={selectedMetadata?.iso || ""} placeholder="100" onChange={(event) => updateSelectedMetadata("iso", event.target.value)} /></label>
+                  <label className="metadata-field"><span>焦距 (mm)</span><input value={selectedMetadata?.focalLength || ""} placeholder="59" onChange={(event) => updateSelectedMetadata("focalLength", event.target.value)} /></label>
+                </div>
+                <label className="metadata-field full">
+                  <span>拍摄日期与时间</span>
+                  <input type="datetime-local" value={selectedMetadata?.takenAt || ""} onChange={(event) => updateSelectedMetadata("takenAt", event.target.value)} />
+                </label>
+                <p className="trademark-note">Logo 来自厂商官网，商标权归各厂商所有；没有内置图标的品牌会显示厂商名称。</p>
+              </div>
+            )}
+
+            <div className="section-heading sub"><span>元素位置与大小</span><small>03</small></div>
+            <div className="element-editor">
+              <label className="metadata-field full"><span>当前编辑元素</span><select value={activeElement} onChange={(event) => setActiveElement(event.target.value as ElementId)}>{editableElements.map((element) => <option key={element} value={element}>{elementLabels[element]}</option>)}</select></label>
+              {activeEditableValue !== undefined && <label className="metadata-field full"><span>直接编辑内容</span><input ref={elementEditorInputRef} type={activeElement === "date" ? "datetime-local" : "text"} value={activeEditableValue} onChange={(event) => updateActiveElementText(event.target.value)} /></label>}
+              <p>像 PPT 一样直接点击预览中的元素：拖动边框内部可移动，拖动右下角手柄可整体缩放，双击文字可立即编辑。下方滑杆用于精确调整。</p>
+              <div className="element-range"><label htmlFor="element-x">水平位置</label><output>{Math.round(activeTransform.x * 100)}%</output><input id="element-x" type="range" min="-60" max="60" value={Math.round(activeTransform.x * 100)} onChange={(event) => updateElementTransform(activeElement, { x: Number(event.target.value) / 100 })} /></div>
+              <div className="element-range"><label htmlFor="element-y">垂直位置</label><output>{Math.round(activeTransform.y * 100)}%</output><input id="element-y" type="range" min="-60" max="60" value={Math.round(activeTransform.y * 100)} onChange={(event) => updateElementTransform(activeElement, { y: Number(event.target.value) / 100 })} /></div>
+              <div className="element-range"><label htmlFor="element-scale">元素大小</label><output>{Math.round(activeTransform.scale * 100)}%</output><input id="element-scale" type="range" min="35" max="250" value={Math.round(activeTransform.scale * 100)} onChange={(event) => updateElementTransform(activeElement, { scale: Number(event.target.value) / 100 })} /></div>
+              <div className="element-range"><label htmlFor="element-font">字体大小</label><output>{Math.round(activeTransform.fontScale * 100)}%</output><input id="element-font" type="range" min="35" max="250" value={Math.round(activeTransform.fontScale * 100)} onChange={(event) => updateElementTransform(activeElement, { fontScale: Number(event.target.value) / 100 })} /></div>
+              <div className="element-actions"><button type="button" onClick={resetActiveElement}>重置当前元素</button><button type="button" onClick={resetCurrentLayout}>重置当前预设布局</button></div>
+            </div>
+
+            <div className="section-heading sub"><span>导出格式</span><small>04</small></div>
+            <div className="format-tabs" role="group" aria-label="导出格式">
+              <button type="button" className={settings.format === "png" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "png" }))}>PNG <small>无损</small></button>
+              <button type="button" className={settings.format === "jpeg" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "jpeg" }))}>JPEG <small>100%</small></button>
+            </div>
+          </div>
+
+          <div className="export-area">
+            {error && <p className="error-message" role="alert">{error}</p>}
+            <button className="export-primary" type="button" disabled={!selected || Boolean(busy)} onClick={() => void exportCurrent()}>
+              <span>{busy || `导出当前${settings.format === "png" ? "无损 PNG" : "最高质量 JPEG"}`}</span><b aria-hidden="true">↓</b>
+            </button>
+            <button className="export-secondary" type="button" disabled={!photos.length || Boolean(busy)} onClick={() => void exportBatch()}>批量导出 ZIP <span>{photos.length || 0}</span></button>
+            <p>导出时保留原照片像素，不进行缩放。</p>
+          </div>
+        </aside>
+      </section>
+
+      <footer><span>PHOTON FRAME · 2026</span><p>你的照片，只在你的浏览器里完成。</p><a href="#top">回到顶部 ↑</a></footer>
+    </main>
+  );
+}
