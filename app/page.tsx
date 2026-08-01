@@ -851,6 +851,10 @@ export default function Home() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [logosReady, setLogosReady] = useState(false);
+  const sharedMetadataOverridesRef = useRef<{
+    standard: Partial<PhotoMetadata>;
+    film: Partial<PhotoMetadata>;
+  }>({ standard: {}, film: {} });
   const [settings, setSettings] = useState<Settings>({
     preset: "classic",
     bandSize: 12,
@@ -946,7 +950,12 @@ export default function Home() {
     }
     setBusy(`正在读取 ${candidates.length} 张照片…`);
     const results = await Promise.allSettled(candidates.map(readPhoto));
-    const loaded = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+    const loaded = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []))
+      .map((photo) => ({
+        ...photo,
+        metadata: { ...photo.metadata, ...sharedMetadataOverridesRef.current.standard },
+        filmMetadata: { ...photo.filmMetadata, ...sharedMetadataOverridesRef.current.film },
+      }));
     if (loaded.length) {
       setPhotos((current) => [...current, ...loaded]);
       setSelectedId((current) => current || loaded[0].id);
@@ -974,22 +983,23 @@ export default function Home() {
     if (selectedId === id) setSelectedId(remaining[0]?.id || null);
   }
 
-  function updateSelectedMetadata(field: keyof PhotoMetadata, value: string) {
-    if (!selected) return;
-    setPhotos((current) => current.map((photo) => photo.id === selected.id
-      ? settings.filmMode
-        ? { ...photo, filmMetadata: { ...photo.filmMetadata, [field]: value } }
-        : { ...photo, metadata: { ...photo.metadata, [field]: value } }
-      : photo));
+  function updateSharedMetadata(field: keyof PhotoMetadata, value: string) {
+    const mode = settings.filmMode ? "film" : "standard";
+    sharedMetadataOverridesRef.current[mode] = {
+      ...sharedMetadataOverridesRef.current[mode],
+      [field]: value,
+    };
+    setPhotos((current) => current.map((photo) => settings.filmMode
+      ? { ...photo, filmMetadata: { ...photo.filmMetadata, [field]: value } }
+      : { ...photo, metadata: { ...photo.metadata, [field]: value } }));
   }
 
-  function resetSelectedMetadata() {
-    if (!selected) return;
-    setPhotos((current) => current.map((photo) => photo.id === selected.id
-      ? settings.filmMode
-        ? { ...photo, filmMetadata: { ...defaultFilmMetadata } }
-        : { ...photo, metadata: { ...photo.autoMetadata } }
-      : photo));
+  function resetSharedMetadata() {
+    const mode = settings.filmMode ? "film" : "standard";
+    sharedMetadataOverridesRef.current[mode] = {};
+    setPhotos((current) => current.map((photo) => settings.filmMode
+      ? { ...photo, filmMetadata: { ...defaultFilmMetadata } }
+      : { ...photo, metadata: { ...photo.autoMetadata } }));
   }
 
   function updateElementTransform(element: ElementId, patch: Partial<ElementTransform>) {
@@ -1040,7 +1050,7 @@ export default function Home() {
   function updateActiveElementText(value: string) {
     if (["cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "date"].includes(activeElement)) {
       const fieldMap: Record<string, keyof PhotoMetadata> = { cameraModel: "model", lens: "lens", aperture: "aperture", exposure: "exposure", iso: "iso", focalLength: "focalLength", date: "takenAt" };
-      updateSelectedMetadata(fieldMap[activeElement], value);
+      updateSharedMetadata(fieldMap[activeElement], value);
       return;
     }
     if (activeElement === "signature") setSettings((current) => ({ ...current, signature: value }));
@@ -1241,6 +1251,7 @@ export default function Home() {
 
         <aside className="control-panel">
           <div className="control-scroll">
+            <section className="control-group style-controls" aria-label="样式与显示设置">
             <div className="section-heading"><span>水印样式</span><small>01</small></div>
             <div className="preset-grid">
               {presets.map((preset) => (
@@ -1295,12 +1306,14 @@ export default function Home() {
                 </div>
               </div>
             )}
+            </section>
 
             {selected && (
+              <section className="control-group metadata-controls" aria-label="批量照片参数">
               <div className="metadata-editor">
                 <div className="metadata-editor-head">
-                  <span><b>照片参数</b><small>{settings.filmMode ? "默认使用胶片参数，可逐张修改" : "默认来自 EXIF，可逐张修改"}</small></span>
-                  <button type="button" onClick={resetSelectedMetadata}>{settings.filmMode ? "恢复胶片默认值" : "恢复自动识别"}</button>
+                  <span><b>批量照片参数</b><small>修改后同步应用到全部 {photos.length} 张照片及后续新增照片</small></span>
+                  <button type="button" onClick={resetSharedMetadata}>{settings.filmMode ? "恢复胶片默认值" : "恢复自动识别"}</button>
                 </div>
 
                 <div className="brand-editor">
@@ -1315,7 +1328,7 @@ export default function Home() {
                     <span>厂商选择</span>
                     <select
                       value={brands.some((brand) => brand.value === selectedBrand?.value) ? selectedBrand?.value : "__custom__"}
-                      onChange={(event) => updateSelectedMetadata("make", event.target.value === "__custom__" ? "" : event.target.value)}
+                      onChange={(event) => updateSharedMetadata("make", event.target.value === "__custom__" ? "" : event.target.value)}
                     >
                       {brands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}
                       <option value="__custom__">其他 / 自定义</option>
@@ -1325,30 +1338,32 @@ export default function Home() {
 
                 <label className="metadata-field full">
                   <span>厂商名称</span>
-                  <input value={selectedMetadata?.make || ""} placeholder="例如 Canon" onChange={(event) => updateSelectedMetadata("make", event.target.value)} />
+                  <input value={selectedMetadata?.make || ""} placeholder="例如 Canon" onChange={(event) => updateSharedMetadata("make", event.target.value)} />
                 </label>
                 <label className="metadata-field full">
                   <span>相机型号</span>
-                  <input value={selectedMetadata?.model || ""} placeholder="例如 Canon EOS 700D" onChange={(event) => updateSelectedMetadata("model", event.target.value)} />
+                  <input value={selectedMetadata?.model || ""} placeholder="例如 Canon EOS 700D" onChange={(event) => updateSharedMetadata("model", event.target.value)} />
                 </label>
                 <label className="metadata-field full">
                   <span>镜头信息</span>
-                  <input value={selectedMetadata?.lens || ""} placeholder="例如 EF-S18-135mm f/3.5-5.6 IS STM" onChange={(event) => updateSelectedMetadata("lens", event.target.value)} />
+                  <input value={selectedMetadata?.lens || ""} placeholder="例如 EF-S18-135mm f/3.5-5.6 IS STM" onChange={(event) => updateSharedMetadata("lens", event.target.value)} />
                 </label>
                 <div className="metadata-grid">
-                  <label className="metadata-field"><span>光圈</span><input value={selectedMetadata?.aperture || ""} placeholder="5.6" onChange={(event) => updateSelectedMetadata("aperture", event.target.value)} /></label>
-                  <label className="metadata-field"><span>快门</span><input value={selectedMetadata?.exposure || ""} placeholder="1/125" onChange={(event) => updateSelectedMetadata("exposure", event.target.value)} /></label>
-                  <label className="metadata-field"><span>ISO</span><input value={selectedMetadata?.iso || ""} placeholder="100" onChange={(event) => updateSelectedMetadata("iso", event.target.value)} /></label>
-                  <label className="metadata-field"><span>焦距 (mm)</span><input value={selectedMetadata?.focalLength || ""} placeholder="59" onChange={(event) => updateSelectedMetadata("focalLength", event.target.value)} /></label>
+                  <label className="metadata-field"><span>光圈</span><input value={selectedMetadata?.aperture || ""} placeholder="5.6" onChange={(event) => updateSharedMetadata("aperture", event.target.value)} /></label>
+                  <label className="metadata-field"><span>快门</span><input value={selectedMetadata?.exposure || ""} placeholder="1/125" onChange={(event) => updateSharedMetadata("exposure", event.target.value)} /></label>
+                  <label className="metadata-field"><span>ISO</span><input value={selectedMetadata?.iso || ""} placeholder="100" onChange={(event) => updateSharedMetadata("iso", event.target.value)} /></label>
+                  <label className="metadata-field"><span>焦距 (mm)</span><input value={selectedMetadata?.focalLength || ""} placeholder="59" onChange={(event) => updateSharedMetadata("focalLength", event.target.value)} /></label>
                 </div>
                 <label className="metadata-field full">
                   <span>拍摄日期与时间</span>
-                  <input type="datetime-local" value={selectedMetadata?.takenAt || ""} onChange={(event) => updateSelectedMetadata("takenAt", event.target.value)} />
+                  <input type="datetime-local" value={selectedMetadata?.takenAt || ""} onChange={(event) => updateSharedMetadata("takenAt", event.target.value)} />
                 </label>
                 <p className="trademark-note">Logo 来自厂商官网，商标权归各厂商所有；没有内置图标的品牌会显示厂商名称。</p>
               </div>
+              </section>
             )}
 
+            <section className="control-group layout-controls" aria-label="元素布局与导出设置">
             <div className="section-heading sub"><span>元素位置与大小</span><small>03</small></div>
             <div className="element-editor">
               <label className="metadata-field full"><span>当前编辑元素</span><select value={activeElement} onChange={(event) => setActiveElement(event.target.value as ElementId)}>{editableElements.map((element) => <option key={element} value={element}>{elementLabels[element]}</option>)}</select></label>
@@ -1366,6 +1381,7 @@ export default function Home() {
               <button type="button" className={settings.format === "png" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "png" }))}>PNG <small>无损</small></button>
               <button type="button" className={settings.format === "jpeg" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "jpeg" }))}>JPEG <small>100%</small></button>
             </div>
+            </section>
           </div>
 
           <div className="export-area">

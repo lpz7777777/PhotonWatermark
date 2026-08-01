@@ -17,15 +17,19 @@ test("ships all watermark presets and local export paths", async () => {
   assert.match(page, /compression: "STORE"/);
 });
 
-test("uses official logo assets and allows per-photo EXIF overrides", async () => {
+test("uses official logo assets and shared batch EXIF overrides", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   for (const asset of ["canon-mark.png", "nikon.svg", "sony.svg", "fujifilm.svg", "leica.svg", "hasselblad.svg", "omsystem.svg", "olympus.png", "panasonic.png", "ricoh.svg", "dji.svg", "apple.svg", "huawei.svg", "honor.svg", "xiaomi.svg", "oppo.svg", "vivo.svg"]) {
     assert.match(page, new RegExp(asset.replace(".", "\\.")));
     await access(new URL(`public/brands/${asset}`, root));
   }
   assert.match(page, /autoMetadata: \{ \.\.\.metadata \}/);
-  assert.match(page, /updateSelectedMetadata/);
-  assert.match(page, /resetSelectedMetadata/);
+  assert.match(page, /updateSharedMetadata/);
+  assert.match(page, /resetSharedMetadata/);
+  assert.match(page, /sharedMetadataOverridesRef/);
+  assert.match(page, /setPhotos\(\(current\) => current\.map\(\(photo\) => settings\.filmMode/);
+  assert.match(page, /metadata: \{ \.\.\.photo\.metadata, \.\.\.sharedMetadataOverridesRef\.current\.standard \}/);
+  assert.match(page, /filmMetadata: \{ \.\.\.photo\.filmMetadata, \.\.\.sharedMetadataOverridesRef\.current\.film \}/);
   assert.match(page, /type="datetime-local"/);
   assert.match(page, /showSignature: boolean/);
   assert.match(page, /settings\.showSignature && settings\.signature/);
