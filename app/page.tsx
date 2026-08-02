@@ -137,20 +137,22 @@ type BrandDefinition = {
   keywords: string[];
   asset?: string;
   monochrome?: boolean;
+  inverseMonochrome?: boolean;
+  clearWhiteBorder?: boolean;
   color?: string;
 };
 
 const brands: BrandDefinition[] = [
   { value: "Canon", label: "Canon", keywords: ["CANON"], asset: "canon-mark.png", color: "#cc0000" },
-  { value: "Nikon", label: "Nikon", keywords: ["NIKON"], asset: "nikon.svg" },
+  { value: "Nikon", label: "Nikon", keywords: ["NIKON"], asset: "nikon.svg", clearWhiteBorder: true },
   { value: "SONY", label: "Sony", keywords: ["SONY"], asset: "sony.svg", monochrome: true },
-  { value: "FUJIFILM", label: "Fujifilm", keywords: ["FUJI"], asset: "fujifilm.svg" },
+  { value: "FUJIFILM", label: "Fujifilm", keywords: ["FUJI"], asset: "fujifilm.svg", inverseMonochrome: true },
   { value: "Leica Camera AG", label: "Leica", keywords: ["LEICA"], asset: "leica.svg", color: "#d71920" },
   { value: "Hasselblad", label: "Hasselblad", keywords: ["HASSELBLAD"], asset: "hasselblad.svg", monochrome: true },
   { value: "OM SYSTEM", label: "OM SYSTEM", keywords: ["OM SYSTEM", "OM DIGITAL"], asset: "omsystem.svg", monochrome: true },
   { value: "OLYMPUS", label: "Olympus", keywords: ["OLYMPUS"], asset: "olympus.png" },
-  { value: "Panasonic", label: "Panasonic / Lumix", keywords: ["PANASONIC", "LUMIX"], asset: "panasonic.png" },
-  { value: "RICOH", label: "Ricoh", keywords: ["RICOH"], asset: "ricoh.svg" },
+  { value: "Panasonic", label: "Panasonic / Lumix", keywords: ["PANASONIC", "LUMIX"], asset: "panasonic.png", inverseMonochrome: true },
+  { value: "RICOH", label: "Ricoh", keywords: ["RICOH"], asset: "ricoh.svg", inverseMonochrome: true },
   { value: "PENTAX", label: "Pentax", keywords: ["PENTAX"], color: "#d71920" },
   { value: "DJI", label: "DJI", keywords: ["DJI"], asset: "dji.svg", monochrome: true },
   { value: "Apple", label: "Apple / iPhone", keywords: ["APPLE", "IPHONE", "IPAD"], asset: "apple.svg", monochrome: true },
@@ -476,14 +478,55 @@ function drawLogoDefinition(
     const drawHeight = image.naturalHeight * scale;
     const drawX = align === "center" ? x - drawWidth / 2 : align === "right" ? x - drawWidth : x;
     const drawY = y - drawHeight / 2;
+    let logoSource: CanvasImageSource = image;
 
-    if (brand.monochrome) {
+    if (brand.clearWhiteBorder) {
+      const cleaned = document.createElement("canvas");
+      cleaned.width = Math.max(1, Math.round(drawWidth));
+      cleaned.height = Math.max(1, Math.round(drawHeight));
+      const cleanedContext = cleaned.getContext("2d", { willReadFrequently: true });
+      if (cleanedContext) {
+        cleanedContext.drawImage(image, 0, 0, cleaned.width, cleaned.height);
+        const pixels = cleanedContext.getImageData(0, 0, cleaned.width, cleaned.height);
+        const visited = new Uint8Array(cleaned.width * cleaned.height);
+        const queue: number[] = [];
+        const enqueueWhite = (pixelIndex: number) => {
+          if (visited[pixelIndex]) return;
+          visited[pixelIndex] = 1;
+          const offset = pixelIndex * 4;
+          if (pixels.data[offset + 3] && pixels.data[offset] > 242 && pixels.data[offset + 1] > 242 && pixels.data[offset + 2] > 242) queue.push(pixelIndex);
+        };
+        for (let column = 0; column < cleaned.width; column += 1) {
+          enqueueWhite(column);
+          enqueueWhite((cleaned.height - 1) * cleaned.width + column);
+        }
+        for (let row = 0; row < cleaned.height; row += 1) {
+          enqueueWhite(row * cleaned.width);
+          enqueueWhite(row * cleaned.width + cleaned.width - 1);
+        }
+        for (let cursor = 0; cursor < queue.length; cursor += 1) {
+          const pixelIndex = queue[cursor];
+          pixels.data[pixelIndex * 4 + 3] = 0;
+          const column = pixelIndex % cleaned.width;
+          const row = Math.floor(pixelIndex / cleaned.width);
+          if (column > 0) enqueueWhite(pixelIndex - 1);
+          if (column + 1 < cleaned.width) enqueueWhite(pixelIndex + 1);
+          if (row > 0) enqueueWhite(pixelIndex - cleaned.width);
+          if (row + 1 < cleaned.height) enqueueWhite(pixelIndex + cleaned.width);
+        }
+        cleanedContext.putImageData(pixels, 0, 0);
+        logoSource = cleaned;
+      }
+    }
+
+    const renderAsMask = brand.monochrome || (inverse && (brand.inverseMonochrome || brand.value === "FUJIFILM"));
+    if (renderAsMask) {
       const mask = document.createElement("canvas");
       mask.width = Math.max(1, Math.round(drawWidth));
       mask.height = Math.max(1, Math.round(drawHeight));
       const maskContext = mask.getContext("2d");
       if (maskContext) {
-        maskContext.drawImage(image, 0, 0, mask.width, mask.height);
+        maskContext.drawImage(logoSource, 0, 0, mask.width, mask.height);
         if (brand.value === "LUCKY") {
           const pixels = maskContext.getImageData(0, 0, mask.width, mask.height);
           for (let index = 0; index < pixels.data.length; index += 4) {
@@ -497,13 +540,7 @@ function drawLogoDefinition(
         context.drawImage(mask, drawX, drawY, drawWidth, drawHeight);
       }
     } else {
-      if (inverse) {
-        const padding = Math.max(4, drawHeight * 0.12);
-        roundedRect(context, drawX - padding, drawY - padding, drawWidth + padding * 2, drawHeight + padding * 2, padding * 0.6);
-        context.fillStyle = "rgba(255,255,255,.96)";
-        context.fill();
-      }
-      context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+      context.drawImage(logoSource, drawX, drawY, drawWidth, drawHeight);
     }
   } else {
     drawTextFit(context, brand.label, x, y, maxWidth, height * 0.24, {

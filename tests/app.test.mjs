@@ -38,6 +38,18 @@ test("uses official logo assets and shared batch EXIF overrides", async () => {
     assert.match(page, new RegExp(`keywords: \\[.*${keyword}`));
   }
   assert.match(page, /brand\.value === "HONOR" \? 2 : 1/);
+  assert.match(page, /inverseMonochrome\?: boolean/);
+  assert.match(page, /clearWhiteBorder\?: boolean/);
+  assert.match(page, /value: "Nikon"[^\n]+clearWhiteBorder: true/);
+  assert.match(page, /if \(brand\.clearWhiteBorder\)/);
+  assert.match(page, /enqueueWhite/);
+  assert.match(page, /brand\.monochrome \|\| \(inverse && \(brand\.inverseMonochrome \|\| brand\.value === "FUJIFILM"\)\)/);
+  const logoRenderer = page.slice(page.indexOf("function drawLogoDefinition"), page.indexOf("function drawBrand"));
+  assert.doesNotMatch(logoRenderer, /rgba\(255,255,255,\.96\)/);
+  assert.doesNotMatch(logoRenderer, /roundedRect/);
+  for (const darkWordmark of ["FUJIFILM", "Panasonic", "RICOH"]) {
+    assert.match(page, new RegExp(`value: "${darkWordmark}"[^\\n]+inverseMonochrome: true`));
+  }
   assert.match(page, /align: CanvasTextAlign = "left"/);
   assert.match(page, /align === "center" \? x - drawWidth \/ 2/);
   assert.match(page, /false, "center"/);
