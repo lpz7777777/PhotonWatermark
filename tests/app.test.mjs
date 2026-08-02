@@ -97,6 +97,10 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /#ED0000/);
   assert.match(page, /#01916D/);
   assert.match(page, /#99D3C5/);
+  assert.match(page, /function drawThemeMicroDivider/);
+  assert.match(page, /detailsSecondaryX - 0\.015/);
+  assert.match(page, /scannerModelX - 0\.015/);
+  assert.match(page, /settings\.showFilmName && settings\.filmShowIso/);
   assert.match(page, /settings\.preset === "kodak" \|\| settings\.preset === "fujifilm" \? contentHeight \* 0\.055 : 0/);
   assert.match(page, /const splitX = x \+ width \* 0\.287/);
   assert.match(page, /const stripeHeight = Math\.max\(6, layout\.photoHeight \* 0\.014\)/);

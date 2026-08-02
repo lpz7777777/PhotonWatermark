@@ -624,6 +624,21 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
   };
 }
 
+function drawThemeMicroDivider(
+  context: CanvasRenderingContext2D,
+  layout: Layout,
+  theme: ThemePalette,
+  x: number,
+  centerY: number,
+  height: number,
+) {
+  context.save();
+  context.globalAlpha = 0.34;
+  context.fillStyle = theme.accent;
+  context.fillRect(x, centerY - height / 2, Math.max(1, layout.photoWidth * 0.00065), height);
+  context.restore();
+}
+
 function drawStandardBand(
   context: CanvasRenderingContext2D,
   photo: PhotoItem,
@@ -690,6 +705,15 @@ function drawStandardBand(
   });
   context.save();
   context.textBaseline = "middle";
+
+  if (theme && (settings.preset === "kodak" || settings.preset === "fujifilm")) {
+    if (settings.showModel && settings.showLens && meta.lens) {
+      drawThemeMicroDivider(context, layout, theme, x + width * 0.435, y + height * 0.32, contentHeight * 0.15);
+    }
+    if ((settings.showModel || settings.showLens) && (settings.showSignature || settings.showDate)) {
+      drawThemeMicroDivider(context, layout, theme, x + width * 0.755, y + height * 0.5, contentHeight * 0.3);
+    }
+  }
 
   if (settings.showBrand) {
     const point = elementPoint(settings, layout, "cameraBrand", x + width * anchors.brandX, y + height * anchors.brandY);
@@ -800,6 +824,23 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   const optionalRow = y + height * 0.91;
   context.save();
   context.textBaseline = "middle";
+
+  if (theme && (settings.preset === "kodak" || settings.preset === "fujifilm")) {
+    const detailsDividerX = x + width * (filmAnchors.detailsSecondaryX - 0.015);
+    const workflowDividerX = x + width * (filmAnchors.scannerModelX - 0.015);
+    if (settings.filmShowModel && settings.filmShowLens && meta.lens) {
+      drawThemeMicroDivider(context, layout, theme, detailsDividerX, topRow, contentHeight * 0.15);
+    }
+    if (settings.showFilmName && settings.filmShowIso) {
+      drawThemeMicroDivider(context, layout, theme, detailsDividerX, bottomRow, contentHeight * 0.15);
+    }
+    if (settings.showScanner) {
+      drawThemeMicroDivider(context, layout, theme, workflowDividerX, topRow, contentHeight * 0.15);
+    }
+    if (settings.showLab) {
+      drawThemeMicroDivider(context, layout, theme, workflowDividerX, bottomRow, contentHeight * 0.15);
+    }
+  }
 
   if (settings.filmShowBrand) {
     const point = elementPoint(settings, layout, "cameraBrand", cameraLogoX, topRow);
