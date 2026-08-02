@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 
 test("ships all watermark presets and local export paths", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
-  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "editorial", "monolith", "archive"]) {
+  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "editorial", "monolith", "archive", "centered", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`id: "${preset}"`));
   }
   for (const exifField of ["Make", "Model", "LensModel", "FNumber", "ExposureTime", "ISO", "FocalLength", "DateTimeOriginal"]) {
@@ -37,6 +37,8 @@ test("uses official logo assets and shared batch EXIF overrides", async () => {
   for (const keyword of ["IPHONE", "HUAWEI", "HONOR", "XIAOMI", "OPPO", "VIVO"]) {
     assert.match(page, new RegExp(`keywords: \\[.*${keyword}`));
   }
+  assert.match(page, /brand\.value === "HONOR" \? 2 : 1/);
+  assert.match(page, /"BKQ-AN90" \? "Magic 8 Pro"/);
   const filmStart = page.indexOf("function drawFilmBand");
   const filmEnd = page.indexOf("function renderPhoto", filmStart);
   assert.match(page.slice(filmStart, filmEnd), /drawBrand\(context, meta\.make/);
@@ -107,6 +109,13 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /className="top-export"/);
   assert.match(page, /className="top-export batch"/);
   assert.match(page, /className=\{`top-film-switch/);
+  assert.match(page, /modelX: 0\.22, modelY: 0\.5/);
+  for (const referencePreset of ["centered", "immersive", "sidecar"]) {
+    assert.match(page, new RegExp(`settings\\.preset === "${referencePreset}"`));
+  }
+  for (const renderer of ["drawCenteredCard", "drawImmersiveCard", "drawSidecarCard"]) {
+    assert.match(page, new RegExp(`function ${renderer}`));
+  }
 });
 
 test("starter preview markers are gone", async () => {

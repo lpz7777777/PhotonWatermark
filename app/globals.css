@@ -520,6 +520,21 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .preset-swatch.archive::after { content: ""; position: absolute; inset: auto 6px 3px; height: 7px; border: 1px solid rgba(32,39,34,.28); }
 .preset-swatch.archive i { left: 8px; width: 4px; height: 4px; bottom: 5px; border-radius: 50%; background: #3f5547; }
 .preset-swatch.archive b { right: 9px; width: 26px; height: 2px; bottom: 6px; background: #767b74; }
+.preset-swatch.centered { background: #fffefb; padding: 4px; }
+.preset-swatch.centered::before { inset: 4px 4px 18px; border-radius: 4px; background: linear-gradient(145deg, #8d9985, #cdd2c5); }
+.preset-swatch.centered::after { content: ""; position: absolute; left: 50%; bottom: 10px; width: 22px; height: 3px; transform: translateX(-50%); background: #1c1d19; }
+.preset-swatch.centered i { left: 18px; width: 12px; height: 2px; bottom: 4px; background: #8d9088; }
+.preset-swatch.centered b { right: 18px; width: 12px; height: 2px; bottom: 4px; background: #8d9088; }
+.preset-swatch.immersive { border: 4px solid #fff; background: linear-gradient(180deg, #8d9d80 0 42%, #30362d 72%, #080908 100%); }
+.preset-swatch.immersive::before { display: none; }
+.preset-swatch.immersive::after { content: "CAMERA"; position: absolute; top: 5px; left: 0; right: 0; color: #fff; text-align: center; font-size: 5px; font-weight: 800; letter-spacing: .08em; }
+.preset-swatch.immersive i { left: 15px; width: 20px; height: 2px; bottom: 7px; background: #fff; }
+.preset-swatch.immersive b { right: 15px; width: 20px; height: 2px; bottom: 7px; background: #fff; }
+.preset-swatch.sidecar { background: linear-gradient(90deg, #9ca897 0 68%, #fff 68% 100%); }
+.preset-swatch.sidecar::before { display: none; }
+.preset-swatch.sidecar::after { content: ""; position: absolute; right: 5px; top: 10px; width: 17px; height: 1px; background: #9da098; box-shadow: 0 8px #c4c6c0, 0 16px #c4c6c0, 0 24px #c4c6c0; }
+.preset-swatch.sidecar i { display: none; }
+.preset-swatch.sidecar b { right: 6px; bottom: 4px; width: 15px; height: 2px; background: #222; }
 
 .section-heading.sub { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 22px; }
 .field-label, .range-heading { font-size: 10px; font-weight: 700; display: block; margin-bottom: 8px; }

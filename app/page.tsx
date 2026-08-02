@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as 
 import exifr from "exifr";
 import JSZip from "jszip";
 
-type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "editorial" | "monolith" | "archive";
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "editorial" | "monolith" | "archive" | "centered" | "immersive" | "sidecar";
 type ExportFormat = "png" | "jpeg";
 type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
 type LayoutKey = PresetId | `film-mode-${PresetId}`;
@@ -123,6 +123,9 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
   { id: "monolith", name: "静奢石碑", note: "暖白留白", swatch: "monolith" },
   { id: "archive", name: "影像档案", note: "理性秩序", swatch: "archive" },
+  { id: "centered", name: "纯白画册", note: "居中信息卡", swatch: "centered" },
+  { id: "immersive", name: "沉浸底片", note: "画内叠印", swatch: "immersive" },
+  { id: "sidecar", name: "侧栏档案", note: "右侧参数栏", swatch: "sidecar" },
 ];
 
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -462,8 +465,9 @@ function drawLogoDefinition(
   context.textBaseline = "middle";
 
   if (image?.naturalWidth && image?.naturalHeight) {
-    const maxHeight = height * (brand.value === "Nikon" || brand.value === "Leica Camera AG" ? 0.58 : 0.38);
-    const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+    const logoScale = brand.value === "HONOR" ? 2 : 1;
+    const maxHeight = height * (brand.value === "Nikon" || brand.value === "Leica Camera AG" ? 0.58 : 0.38) * logoScale;
+    const scale = Math.min((maxWidth * logoScale) / image.naturalWidth, maxHeight / image.naturalHeight);
     const drawWidth = image.naturalWidth * scale;
     const drawHeight = image.naturalHeight * scale;
     const drawY = y - drawHeight / 2;
@@ -523,6 +527,57 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
   const photoHeight = Math.max(1, Math.round(photo.height * scale));
   const activeBandSize = settings.filmMode ? settings.filmBandSize : settings.bandSize;
   const baseBand = Math.max(72, Math.round(photoHeight * (activeBandSize / 100)));
+
+  if (settings.preset === "centered") {
+    const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.028));
+    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.19));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin + cardBand,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: photoHeight + margin,
+      bandWidth: photoWidth,
+      bandHeight: cardBand,
+    };
+  }
+
+  if (settings.preset === "immersive") {
+    const margin = Math.max(14, Math.round(Math.min(photoWidth, photoHeight) * 0.018));
+    const overlayBand = Math.max(baseBand, Math.round(photoHeight * 0.17));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin * 2,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: margin + photoHeight - overlayBand,
+      bandWidth: photoWidth,
+      bandHeight: overlayBand,
+    };
+  }
+
+  if (settings.preset === "sidecar") {
+    const margin = Math.max(14, Math.round(Math.min(photoWidth, photoHeight) * 0.018));
+    const panelWidth = Math.max(Math.round(photoWidth * 0.34), Math.round(photoWidth * (activeBandSize / 100) * 3.5));
+    return {
+      width: photoWidth + panelWidth + margin * 3,
+      height: photoHeight + margin * 2,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: photoWidth + margin * 2,
+      bandY: margin,
+      bandWidth: panelWidth,
+      bandHeight: photoHeight,
+    };
+  }
 
   if (settings.preset === "gallery") {
     const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.025));
@@ -625,7 +680,7 @@ function drawStandardBand(
   const advancedPortrait = layout.photoHeight > layout.photoWidth * 1.15 && ["editorial", "monolith", "archive"].includes(settings.preset);
   if (advancedPortrait) Object.assign(anchors, {
     brandX: 0.035, brandY: 0.5, brandWidth: 0.14,
-    modelX: 0.22, modelY: 0.3, modelWidth: 0.28, modelSize: 0.17,
+    modelX: 0.22, modelY: 0.5, modelWidth: 0.28, modelSize: 0.17,
     lensX: 0.22, lensY: 0.7, lensWidth: 0.28, lensSize: 0.11,
     apertureX: 0.55, apertureY: 0.3, exposureX: 0.65, exposureY: 0.3,
     isoX: 0.55, isoY: 0.7, focalX: 0.65, focalY: 0.7,
@@ -780,6 +835,136 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   context.restore();
 }
 
+function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = settings.filmMode ? photo.filmMetadata : photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const showBrand = settings.filmMode ? settings.filmShowBrand : settings.showBrand;
+  const showModel = settings.filmMode ? settings.filmShowModel : settings.showModel;
+  const showLens = settings.filmMode ? settings.filmShowLens : settings.showLens;
+  const showDate = settings.filmMode ? settings.filmShowDate : settings.showDate;
+  const showAperture = settings.filmMode ? settings.filmShowAperture : settings.showAperture;
+  const showExposure = settings.filmMode ? settings.filmShowExposure : settings.showExposure;
+  const showIso = settings.filmMode ? settings.filmShowIso : settings.showIso;
+  const showFocal = settings.filmMode ? settings.filmShowFocalLength : settings.showFocalLength;
+  const showSignature = settings.filmMode ? settings.filmShowSignature : settings.showSignature;
+  context.save();
+  context.fillStyle = "#fffefb";
+  context.fillRect(x, y, width, height);
+  context.strokeStyle = "rgba(30,30,26,.24)";
+  context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
+  for (const dividerX of [0.255, 0.73]) {
+    context.beginPath();
+    context.moveTo(x + width * dividerX, y + height * 0.6);
+    context.lineTo(x + width * dividerX, y + height * 0.74);
+    context.stroke();
+  }
+  if (showBrand) {
+    const brandWidth = width * 0.2;
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5 - brandWidth / 2, y + height * 0.19);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.72 * point.scale);
+  }
+  if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.5, y + height * 0.37, width * 0.34, contentHeight * 0.13, { align: "center", color: "#171815", weight: 700 });
+  if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.5, width * 0.42, contentHeight * 0.1, { align: "center", color: "#777870", weight: 400 });
+  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.15, y + height * 0.67, width * 0.21, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
+  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.67, width * 0.09, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.67, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.87, width * 0.42, contentHeight * 0.105, { align: "center", color: "#30312c", weight: 450 });
+  context.restore();
+}
+
+function drawImmersiveCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = settings.filmMode ? photo.filmMetadata : photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const showBrand = settings.filmMode ? settings.filmShowBrand : settings.showBrand;
+  const showModel = settings.filmMode ? settings.filmShowModel : settings.showModel;
+  const showLens = settings.filmMode ? settings.filmShowLens : settings.showLens;
+  const showDate = settings.filmMode ? settings.filmShowDate : settings.showDate;
+  const showAperture = settings.filmMode ? settings.filmShowAperture : settings.showAperture;
+  const showExposure = settings.filmMode ? settings.filmShowExposure : settings.showExposure;
+  const showIso = settings.filmMode ? settings.filmShowIso : settings.showIso;
+  const showFocal = settings.filmMode ? settings.filmShowFocalLength : settings.showFocalLength;
+  const showSignature = settings.filmMode ? settings.filmShowSignature : settings.showSignature;
+  context.save();
+  const gradient = context.createLinearGradient(0, y - height * 0.8, 0, y + height);
+  gradient.addColorStop(0, "rgba(0,0,0,0)");
+  gradient.addColorStop(0.46, "rgba(0,0,0,.24)");
+  gradient.addColorStop(1, "rgba(0,0,0,.82)");
+  context.fillStyle = gradient;
+  context.fillRect(x, y - height * 0.8, width, height * 1.8);
+  if (showBrand) {
+    const brandWidth = width * 0.16;
+    const point = elementPoint(settings, layout, "cameraBrand", layout.photoX + layout.photoWidth * 0.5 - brandWidth / 2, layout.photoY + layout.photoHeight * 0.055);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.76 * point.scale, true);
+  }
+  if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", layout.photoX + layout.photoWidth * 0.5, layout.photoY + layout.photoHeight * 0.105, width * 0.3, contentHeight * 0.11, { align: "center", color: "rgba(255,255,255,.9)", weight: 600 });
+  if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.28, width * 0.46, contentHeight * 0.095, { align: "center", color: "rgba(255,255,255,.65)", weight: 400, family: "Georgia, serif" });
+  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.5, y + height * 0.43, width * 0.34, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.68)", weight: 400 });
+  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
+  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.7, width * 0.1, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
+  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
+  if (showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
+  if (showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.5, y + height * 0.9, width * 0.34, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.72)", weight: 450 });
+  context.restore();
+}
+
+function drawSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = settings.filmMode ? photo.filmMetadata : photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const showBrand = settings.filmMode ? settings.filmShowBrand : settings.showBrand;
+  const showModel = settings.filmMode ? settings.filmShowModel : settings.showModel;
+  const showLens = settings.filmMode ? settings.filmShowLens : settings.showLens;
+  const showDate = settings.filmMode ? settings.filmShowDate : settings.showDate;
+  const showAperture = settings.filmMode ? settings.filmShowAperture : settings.showAperture;
+  const showExposure = settings.filmMode ? settings.filmShowExposure : settings.showExposure;
+  const showIso = settings.filmMode ? settings.filmShowIso : settings.showIso;
+  const showFocal = settings.filmMode ? settings.filmShowFocalLength : settings.showFocalLength;
+  const showSignature = settings.filmMode ? settings.filmShowSignature : settings.showSignature;
+  const labelX = x + width * 0.12;
+  const valueX = x + width * 0.52;
+  const row = (label: string, element: ElementId, value: string, position: number, visible: boolean, valueWidth = 0.4) => {
+    if (!visible) return;
+    drawTextFit(context, label, labelX, y + height * position, width * 0.34, contentHeight * 0.1, { align: "left", color: "#a3a59f", weight: 400 });
+    drawElementText(context, settings, layout, element, value, valueX, y + height * position, width * valueWidth, contentHeight * 0.11, { color: "#292a26", weight: 500 });
+  };
+  context.save();
+  context.fillStyle = "#ffffff";
+  context.fillRect(x, y, width, height);
+  context.fillStyle = "#767970";
+  context.font = `600 ${Math.max(10, contentHeight * 0.09)}px Arial, sans-serif`;
+  context.letterSpacing = `${Math.max(1, contentHeight * 0.012)}px`;
+  context.fillText("PHOTO NOTES", labelX, y + height * 0.08);
+  context.strokeStyle = "rgba(30,31,27,.16)";
+  context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
+  for (const divider of [0.33, 0.68, 0.78, 0.87]) {
+    context.beginPath();
+    context.moveTo(x + width * 0.1, y + height * divider);
+    context.lineTo(x + width * 0.9, y + height * divider);
+    context.stroke();
+  }
+  row("Taken At", "date", formatDate(meta.takenAt), 0.18, showDate);
+  row("Lens", "lens", meta.lens || "—", 0.27, showLens);
+  row("Focal", "focalLength", formatFocal(meta.focalLength), 0.39, showFocal);
+  row("Aperture", "aperture", formatAperture(meta.aperture), 0.47, showAperture);
+  row("Shutter", "exposure", formatExposure(meta.exposure), 0.55, showExposure);
+  row("ISO", "iso", meta.iso || "—", 0.63, showIso);
+  row("Photo By", "signature", settings.signature || "—", 0.73, showSignature);
+  row("Shot On", "cameraModel", meta.model || "CAMERA", 0.83, showModel);
+  if (showBrand) {
+    const brandWidth = width * 0.7;
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.15, y + height * 0.93);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.17 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.34 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.82 * point.scale);
+  }
+  context.restore();
+}
+
 function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, collectBounds = false): RenderedPhoto {
   const fullLayout = getLayout(photo, settings, 1);
   const scale = maxEdge ? Math.min(1, maxEdge / Math.max(fullLayout.width, fullLayout.height)) : 1;
@@ -798,9 +983,23 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   const background = theme?.background || (settings.preset === "noir" || settings.preset === "film" ? "#10100f" : settings.preset === "gallery" ? "#f2efe7" : "#ffffff");
   context.fillStyle = background;
   context.fillRect(0, 0, layout.width, layout.height);
-  context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
+  if (settings.preset === "centered") {
+    context.save();
+    roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, Math.max(10, layout.photoWidth * 0.018));
+    context.clip();
+    context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
+    context.restore();
+  } else {
+    context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
+  }
 
-  if (settings.preset === "overlay") {
+  if (settings.preset === "centered") {
+    drawCenteredCard(context, photo, settings, layout);
+  } else if (settings.preset === "immersive") {
+    drawImmersiveCard(context, photo, settings, layout);
+  } else if (settings.preset === "sidecar") {
+    drawSidecarCard(context, photo, settings, layout);
+  } else if (settings.preset === "overlay") {
     const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.35, 0, layout.bandY + layout.bandHeight);
     gradient.addColorStop(0, "rgba(0,0,0,0)");
     gradient.addColorStop(0.42, "rgba(0,0,0,.30)");
@@ -874,7 +1073,7 @@ async function readPhoto(file: File): Promise<PhotoItem> {
     }).catch(() => undefined);
     const metadata: PhotoMetadata = {
       make: clean(raw?.Make),
-      model: clean(raw?.Model),
+      model: clean(raw?.Model).toUpperCase() === "BKQ-AN90" ? "Magic 8 Pro" : clean(raw?.Model),
       lens: clean(raw?.LensModel),
       aperture: numberString(raw?.FNumber),
       exposure: exposureString(raw?.ExposureTime),
