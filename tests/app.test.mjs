@@ -134,6 +134,8 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /className="top-export"/);
   assert.match(page, /className="top-export batch"/);
   assert.match(page, /className=\{`top-film-switch/);
+  assert.match(page, /className="preset-rail"/);
+  assert.match(page, /preset-rail[\s\S]*presets\.map/);
   assert.match(page, /modelX: 0\.22, modelY: 0\.5/);
   for (const referencePreset of ["centered", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`settings\\.preset === "${referencePreset}"`));

@@ -1781,26 +1781,28 @@ export default function Home() {
           {isDragging && <div className="drop-overlay">松开即可读取照片</div>}
         </div>
 
+        <aside className="preset-rail" aria-label="水印样式">
+          <div className="section-heading"><span>水印样式</span><small>{String(presets.findIndex((preset) => preset.id === settings.preset) + 1).padStart(2, "0")}</small></div>
+          <div className="preset-grid">
+            {presets.map((preset) => (
+              <button
+                type="button"
+                key={preset.id}
+                className={`preset-card ${settings.preset === preset.id ? "active" : ""}`}
+                onClick={() => setSettings((current) => ({ ...current, preset: preset.id }))}
+              >
+                <span className={`preset-swatch ${preset.swatch}`}><i /><b /></span>
+                <span><strong>{preset.name}</strong><small>{preset.note}</small></span>
+                {settings.preset === preset.id && <em aria-label="已选择">✓</em>}
+              </button>
+            ))}
+          </div>
+        </aside>
+
         <aside className="control-panel">
           <div className="control-scroll">
             <section className="control-group style-controls" aria-label="样式与显示设置">
-            <div className="section-heading"><span>水印样式</span><small>01</small></div>
-            <div className="preset-grid">
-              {presets.map((preset) => (
-                <button
-                  type="button"
-                  key={preset.id}
-                  className={`preset-card ${settings.preset === preset.id ? "active" : ""}`}
-                  onClick={() => setSettings((current) => ({ ...current, preset: preset.id }))}
-                >
-                  <span className={`preset-swatch ${preset.swatch}`}><i /><b /></span>
-                  <span><strong>{preset.name}</strong><small>{preset.note}</small></span>
-                  {settings.preset === preset.id && <em aria-label="已选择">✓</em>}
-                </button>
-              ))}
-            </div>
-
-            <div className="section-heading sub"><span>内容与尺寸</span><small>02</small></div>
+            <div className="section-heading"><span>内容与尺寸</span><small>02</small></div>
             <label className="field-label" htmlFor="signature">签名</label>
             <div className="text-field"><span>by</span><input id="signature" value={settings.signature} maxLength={30} disabled={settings.filmMode ? !settings.filmShowSignature : !settings.showSignature} onChange={(event) => setSettings((current) => ({ ...current, signature: event.target.value }))} /></div>
 
