@@ -7,7 +7,7 @@ import JSZip from "jszip";
 type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "editorial" | "monolith" | "archive" | "centered" | "immersive" | "sidecar";
 type ExportFormat = "png" | "jpeg";
 type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
-type LayoutKey = PresetId | `film-mode-${PresetId}`;
+type LayoutKey = PresetId | `film-mode-${PresetId}` | `film-compact-${PresetId}`;
 
 type ElementTransform = {
   x: number;
@@ -69,6 +69,7 @@ type Settings = {
   showIso: boolean;
   showFocalLength: boolean;
   filmMode: boolean;
+  filmCompact: boolean;
   filmShowSignature: boolean;
   filmShowBrand: boolean;
   filmShowModel: boolean;
@@ -191,6 +192,7 @@ const elementLabels: Record<ElementId, string> = {
 
 const standardElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "signature", "date"];
 const filmElementIds: ElementId[] = [...standardElementIds, "filmBrand", "filmName", "lab", "scanner"];
+const compactFilmElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "filmBrand", "filmName", "iso"];
 const defaultTransform: ElementTransform = { x: 0, y: 0, scale: 1, fontScale: 1 };
 let collectingElementBounds: ElementBoundsMap | null = null;
 
@@ -306,6 +308,7 @@ function catalogInfo(catalog: BrandDefinition[], value: string): BrandDefinition
 }
 
 function currentLayoutKey(settings: Settings): LayoutKey {
+  if (settings.filmMode && settings.filmCompact) return `film-compact-${settings.preset}`;
   return settings.filmMode ? `film-mode-${settings.preset}` : settings.preset;
 }
 
@@ -531,6 +534,22 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
   const photoHeight = Math.max(1, Math.round(photo.height * scale));
   const activeBandSize = settings.filmMode ? settings.filmBandSize : settings.bandSize;
   const baseBand = Math.max(72, Math.round(photoHeight * (activeBandSize / 100)));
+
+  if (settings.filmMode && settings.filmCompact && settings.preset === "sidecar") {
+    const margin = Math.max(14, Math.round(Math.min(photoWidth, photoHeight) * 0.018));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin + baseBand,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: photoHeight + margin,
+      bandWidth: photoWidth,
+      bandHeight: baseBand,
+    };
+  }
 
   if (settings.preset === "centered") {
     const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.028));
@@ -880,6 +899,47 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   context.restore();
 }
 
+function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout, inverse = false, theme?: ThemePalette) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.filmMetadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const centerY = y + height * (settings.preset === "kodak" || settings.preset === "fujifilm" ? 0.59 : 0.52);
+  const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
+  const ink = theme?.ink || (inverse ? "#ffffff" : "#171815");
+  const muted = theme?.muted || (inverse ? "rgba(255,255,255,.66)" : "#696c65");
+  const dividerColor = theme?.accent || (inverse ? "#ffffff" : "#272923");
+  const anchors = {
+    cameraLogo: 0.03, cameraModel: 0.205, lens: 0.35,
+    filmLogo: 0.575, filmName: 0.735, iso: 0.905,
+  };
+  const dividerXs = [0.18, 0.325, 0.545, 0.705, 0.875];
+
+  context.save();
+  context.textBaseline = "middle";
+  context.fillStyle = dividerColor;
+  context.globalAlpha = theme ? 0.46 : 0.24;
+  for (const dividerX of dividerXs) {
+    context.fillRect(x + width * dividerX, centerY - contentHeight * 0.105, Math.max(1, layout.photoWidth * 0.00065), contentHeight * 0.21);
+  }
+  context.globalAlpha = 1;
+
+  if (settings.filmShowBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * anchors.cameraLogo, centerY);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.13 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.13 * point.scale, contentHeight * 0.7 * point.scale, inverse);
+  }
+  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * anchors.cameraModel, centerY, width * 0.095, contentHeight * 0.13, { color: ink, weight: 700 });
+  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * anchors.lens, centerY, width * 0.16, contentHeight * 0.115, { color: muted, weight: 450 });
+  if (settings.showFilmBrand) {
+    const point = elementPoint(settings, layout, "filmBrand", x + width * anchors.filmLogo, centerY);
+    recordElementBounds("filmBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.095 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.095 * point.scale, contentHeight * 0.58 * point.scale, inverse);
+  }
+  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", x + width * anchors.filmName, centerY, width * 0.11, contentHeight * 0.135, { color: ink, weight: 700 });
+  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * anchors.iso, centerY, width * 0.07, contentHeight * 0.115, { color: muted, weight: 600 });
+  context.restore();
+}
+
 function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
   const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
   const meta = settings.filmMode ? photo.filmMetadata : photo.metadata;
@@ -1039,7 +1099,23 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
   }
 
-  if (settings.preset === "centered") {
+  if (settings.filmMode && settings.filmCompact) {
+    const compactInverse = settings.preset === "overlay" || settings.preset === "immersive" || settings.preset === "film" || settings.preset === "noir";
+    if (settings.preset === "overlay" || settings.preset === "immersive") {
+      const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.45, 0, layout.bandY + layout.bandHeight);
+      gradient.addColorStop(0, "rgba(0,0,0,0)");
+      gradient.addColorStop(0.42, "rgba(0,0,0,.28)");
+      gradient.addColorStop(1, "rgba(0,0,0,.82)");
+      context.fillStyle = gradient;
+      context.fillRect(layout.bandX, layout.bandY - layout.bandHeight * 0.45, layout.bandWidth, layout.bandHeight * 1.45);
+    }
+    if (settings.preset === "gallery") {
+      context.fillStyle = "rgba(30,30,25,.15)";
+      context.fillRect(layout.bandX, layout.bandY, layout.bandWidth, Math.max(1, layout.bandHeight * 0.004));
+    }
+    if (theme) drawThemeRules(context, layout, theme, settings.preset);
+    drawCompactFilmBand(context, photo, settings, layout, compactInverse, theme);
+  } else if (settings.preset === "centered") {
     drawCenteredCard(context, photo, settings, layout);
   } else if (settings.preset === "immersive") {
     drawImmersiveCard(context, photo, settings, layout);
@@ -1216,6 +1292,7 @@ export default function Home() {
     showIso: true,
     showFocalLength: true,
     filmMode: false,
+    filmCompact: false,
     filmShowSignature: false,
     filmShowBrand: true,
     filmShowModel: true,
@@ -1255,7 +1332,7 @@ export default function Home() {
   const selectedMetadata = selected ? (settings.filmMode ? selected.filmMetadata : selected.metadata) : undefined;
   const selectedBrand = selectedMetadata ? brandInfo(selectedMetadata.make, selectedMetadata.model) : undefined;
   const selectedHasExif = selected ? Object.values(selected.autoMetadata).some(Boolean) : false;
-  const editableElements = settings.filmMode ? filmElementIds : standardElementIds;
+  const editableElements = settings.filmMode ? (settings.filmCompact ? compactFilmElementIds : filmElementIds) : standardElementIds;
   const activeTransform = elementTransform(settings, activeElement);
   const activeEditableValue = editableValueForElement(activeElement, selected, settings);
 
@@ -1264,6 +1341,19 @@ export default function Home() {
   useEffect(() => {
     void preloadOfficialLogos().then(() => setLogosReady(true));
   }, []);
+
+  useEffect(() => {
+    const toggleCompactFilm = (event: KeyboardEvent) => {
+      if (!settings.filmMode || !event.shiftKey || event.key.toLowerCase() !== "f") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target?.matches("input, textarea, select")) return;
+      event.preventDefault();
+      setSettings((current) => ({ ...current, filmCompact: !current.filmCompact }));
+      if (!compactFilmElementIds.includes(activeElement)) setActiveElement("cameraBrand");
+    };
+    window.addEventListener("keydown", toggleCompactFilm);
+    return () => window.removeEventListener("keydown", toggleCompactFilm);
+  }, [settings.filmMode, activeElement]);
 
   useEffect(() => {
     if (!selected || !previewRef.current) return;
@@ -1520,6 +1610,17 @@ export default function Home() {
             <input className="visually-hidden" type="checkbox" checked={settings.filmMode} onChange={(event) => { const enabled = event.target.checked; setSettings((current) => ({ ...current, filmMode: enabled })); if (!enabled && !standardElementIds.includes(activeElement)) setActiveElement("cameraBrand"); }} />
             <i aria-hidden="true" /><span>胶片模式</span>
           </label>
+          {settings.filmMode && (
+            <button
+              className={`top-compact-toggle ${settings.filmCompact ? "active" : ""}`}
+              type="button"
+              title="只显示相机与胶卷信息（快捷键 Shift+F）"
+              aria-pressed={settings.filmCompact}
+              onClick={() => { setSettings((current) => ({ ...current, filmCompact: !current.filmCompact })); if (!compactFilmElementIds.includes(activeElement)) setActiveElement("cameraBrand"); }}
+            >
+              <span aria-hidden="true">≡</span> 精简一行 <kbd>⇧F</kbd>
+            </button>
+          )}
           <div className="top-format" role="group" aria-label="快捷选择导出格式">
             <button type="button" className={settings.format === "png" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "png" }))}>PNG</button>
             <button type="button" className={settings.format === "jpeg" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "jpeg" }))}>JPG</button>
@@ -1652,15 +1753,15 @@ export default function Home() {
                 <div className="toggle-list compact">
                   <label><span><b>胶卷厂商 Logo</b></span><input type="checkbox" checked={settings.showFilmBrand} onChange={(event) => setSettings((current) => ({ ...current, showFilmBrand: event.target.checked }))} /><i /></label>
                   <label><span><b>胶卷名称</b></span><input type="checkbox" checked={settings.showFilmName} onChange={(event) => setSettings((current) => ({ ...current, showFilmName: event.target.checked }))} /><i /></label>
-                  <label><span><b>冲洗店名称</b></span><input type="checkbox" checked={settings.showLab} onChange={(event) => setSettings((current) => ({ ...current, showLab: event.target.checked }))} /><i /></label>
-                  <label><span><b>扫描仪 Logo 与名称</b></span><input type="checkbox" checked={settings.showScanner} onChange={(event) => setSettings((current) => ({ ...current, showScanner: event.target.checked }))} /><i /></label>
+                  <label><span><b>冲洗店名称</b></span><input type="checkbox" disabled={settings.filmCompact} checked={settings.showLab} onChange={(event) => setSettings((current) => ({ ...current, showLab: event.target.checked }))} /><i /></label>
+                  <label><span><b>扫描仪 Logo 与名称</b></span><input type="checkbox" disabled={settings.filmCompact} checked={settings.showScanner} onChange={(event) => setSettings((current) => ({ ...current, showScanner: event.target.checked }))} /><i /></label>
                 </div>
                 <div className="film-form-grid">
                   <label className="metadata-field"><span>胶卷厂商</span><select value={settings.filmBrand} onChange={(event) => setSettings((current) => ({ ...current, filmBrand: event.target.value }))}>{filmBrands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</select></label>
                   <label className="metadata-field"><span>胶卷名称</span><input value={settings.filmName} placeholder="例如 PORTRA 400" onChange={(event) => setSettings((current) => ({ ...current, filmName: event.target.value }))} /></label>
-                  <label className="metadata-field"><span>冲洗店名称</span><input value={settings.labName} placeholder="完全自定义" onChange={(event) => setSettings((current) => ({ ...current, labName: event.target.value }))} /></label>
-                  <label className="metadata-field"><span>扫描仪厂商</span><select value={settings.scannerBrand} onChange={(event) => setSettings((current) => ({ ...current, scannerBrand: event.target.value }))}>{scannerBrands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</select></label>
-                  <label className="metadata-field full"><span>扫描仪型号</span><input value={settings.scannerName} placeholder="例如 HS-1800 / SP-3000" onChange={(event) => setSettings((current) => ({ ...current, scannerName: event.target.value }))} /></label>
+                  <label className="metadata-field"><span>冲洗店名称</span><input disabled={settings.filmCompact} value={settings.labName} placeholder="完全自定义" onChange={(event) => setSettings((current) => ({ ...current, labName: event.target.value }))} /></label>
+                  <label className="metadata-field"><span>扫描仪厂商</span><select disabled={settings.filmCompact} value={settings.scannerBrand} onChange={(event) => setSettings((current) => ({ ...current, scannerBrand: event.target.value }))}>{scannerBrands.map((brand) => <option key={brand.value} value={brand.value}>{brand.label}</option>)}</select></label>
+                  <label className="metadata-field full"><span>扫描仪型号</span><input disabled={settings.filmCompact} value={settings.scannerName} placeholder="例如 HS-1800 / SP-3000" onChange={(event) => setSettings((current) => ({ ...current, scannerName: event.target.value }))} /></label>
                 </div>
               </div>
             )}

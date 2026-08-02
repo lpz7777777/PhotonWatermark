@@ -129,6 +129,25 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .top-film-switch.active { border-color: #b6c35e; background: #f2f5dc; color: #39420f; }
 .top-film-switch.active i { background: #a9bf19; }
 .top-film-switch.active i::after { transform: translateX(9px); }
+.top-compact-toggle {
+  height: 38px;
+  padding: 0 11px;
+  border: 1px solid #d5d6cf;
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  color: #555850;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.top-compact-toggle > span { font-size: 15px; line-height: 1; transform: translateY(-1px); }
+.top-compact-toggle kbd { padding: 2px 5px; border-radius: 5px; background: #ecece6; color: #777970; font: 700 8px/1 Arial, sans-serif; }
+.top-compact-toggle.active { border-color: #9cad26; background: #eef3d1; color: #3f4b0c; }
+.top-compact-toggle.active kbd { background: #dce6a5; color: #52620e; }
 .top-format { height: 38px; padding: 3px; display: flex; border-radius: 999px; background: #e7e7e1; }
 .top-format button { min-width: 38px; border: 0; border-radius: 999px; background: transparent; color: #777970; font-size: 9px; font-weight: 700; cursor: pointer; }
 .top-format button.active { background: #fff; color: #171815; box-shadow: 0 1px 5px rgba(20,21,18,.09); }
@@ -656,7 +675,7 @@ footer a { color: inherit; text-decoration: none; }
 @media (max-width: 900px) {
   .topbar { padding-left: 18px; padding-right: 18px; }
   .topbar-actions { gap: 5px; }
-  .top-export, .top-film-switch { padding-left: 9px; padding-right: 9px; }
+  .top-export, .top-film-switch, .top-compact-toggle { padding-left: 9px; padding-right: 9px; }
   .intro { align-items: flex-start; flex-direction: column; gap: 20px; }
   .intro-copy { width: min(520px, 100%); }
   .studio { display: grid; grid-template-columns: 110px minmax(0, 1fr); }
@@ -678,7 +697,8 @@ footer a { color: inherit; text-decoration: none; }
   .topbar-actions { flex: 1; overflow-x: auto; justify-content: flex-end; scrollbar-width: none; }
   .topbar-actions::-webkit-scrollbar { display: none; }
   .top-format { display: none; }
-  .top-film-switch, .top-export, .header-action { height: 34px; flex: 0 0 auto; font-size: 9px; }
+  .top-film-switch, .top-compact-toggle, .top-export, .header-action { height: 34px; flex: 0 0 auto; font-size: 9px; }
+  .top-compact-toggle kbd { display: none; }
   .top-export { padding: 0 9px; }
   .header-action { padding: 8px 11px; }
   .intro { padding: 36px 18px 28px; min-height: 220px; }

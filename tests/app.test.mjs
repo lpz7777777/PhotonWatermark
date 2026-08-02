@@ -67,6 +67,15 @@ test("supports independent metadata switches, film workflow and movable elements
     await access(new URL(`public/brands/${asset}`, root));
   }
   assert.match(page, /function drawFilmWorkflowBand/);
+  assert.match(page, /function drawCompactFilmBand/);
+  assert.match(page, /filmCompact: boolean/);
+  assert.match(page, /film-compact-\$\{settings\.preset\}/);
+  assert.match(page, /compactFilmElementIds/);
+  assert.match(page, /Shift\+F/);
+  assert.match(page, /top-compact-toggle/);
+  assert.match(page, /settings\.filmMode && settings\.filmCompact/);
+  assert.match(page, /const dividerXs = \[0\.18, 0\.325, 0\.545, 0\.705, 0\.875\]/);
+  assert.doesNotMatch(page.slice(page.indexOf("function drawCompactFilmBand"), page.indexOf("function drawCenteredCard")), /scannerName|labName/);
   assert.match(page, /handleElementPointerDown/);
   assert.match(page, /onPointerMove=\{handleElementPointerMove\}/);
   assert.match(page, /onDoubleClick=\{handleElementDoubleClick\}/);
