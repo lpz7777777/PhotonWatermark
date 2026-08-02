@@ -459,6 +459,7 @@ function drawLogoDefinition(
   maxWidth: number,
   height: number,
   inverse = false,
+  align: CanvasTextAlign = "left",
 ) {
   const image = logoCache.get(brand.value);
   context.save();
@@ -470,6 +471,7 @@ function drawLogoDefinition(
     const scale = Math.min((maxWidth * logoScale) / image.naturalWidth, maxHeight / image.naturalHeight);
     const drawWidth = image.naturalWidth * scale;
     const drawHeight = image.naturalHeight * scale;
+    const drawX = align === "center" ? x - drawWidth / 2 : align === "right" ? x - drawWidth : x;
     const drawY = y - drawHeight / 2;
 
     if (brand.monochrome) {
@@ -489,20 +491,21 @@ function drawLogoDefinition(
         maskContext.globalCompositeOperation = "source-in";
         maskContext.fillStyle = inverse ? "#ffffff" : "#111111";
         maskContext.fillRect(0, 0, mask.width, mask.height);
-        context.drawImage(mask, x, drawY, drawWidth, drawHeight);
+        context.drawImage(mask, drawX, drawY, drawWidth, drawHeight);
       }
     } else {
       if (inverse) {
         const padding = Math.max(4, drawHeight * 0.12);
-        roundedRect(context, x - padding, drawY - padding, drawWidth + padding * 2, drawHeight + padding * 2, padding * 0.6);
+        roundedRect(context, drawX - padding, drawY - padding, drawWidth + padding * 2, drawHeight + padding * 2, padding * 0.6);
         context.fillStyle = "rgba(255,255,255,.96)";
         context.fill();
       }
-      context.drawImage(image, x, drawY, drawWidth, drawHeight);
+      context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
     }
   } else {
     drawTextFit(context, brand.label, x, y, maxWidth, height * 0.24, {
       weight: 800,
+      align,
       color: inverse ? "#ffffff" : brand.color || "#111111",
     });
   }
@@ -518,8 +521,9 @@ function drawBrand(
   maxWidth: number,
   height: number,
   inverse = false,
+  align: CanvasTextAlign = "left",
 ) {
-  drawLogoDefinition(context, brandInfo(make, model), x, y, maxWidth, height, inverse);
+  drawLogoDefinition(context, brandInfo(make, model), x, y, maxWidth, height, inverse, align);
 }
 
 function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
@@ -902,9 +906,9 @@ function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   }
   if (showBrand) {
     const brandWidth = width * 0.2;
-    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5 - brandWidth / 2, y + height * 0.19);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.72 * point.scale);
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.19);
+    recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.72 * point.scale, false, "center");
   }
   if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.5, y + height * 0.37, width * 0.34, contentHeight * 0.13, { align: "center", color: "#171815", weight: 700 });
   if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.5, width * 0.42, contentHeight * 0.1, { align: "center", color: "#777870", weight: 400 });
@@ -939,17 +943,18 @@ function drawImmersiveCard(context: CanvasRenderingContext2D, photo: PhotoItem, 
   context.fillRect(x, y - height * 0.8, width, height * 1.8);
   if (showBrand) {
     const brandWidth = width * 0.16;
-    const point = elementPoint(settings, layout, "cameraBrand", layout.photoX + layout.photoWidth * 0.5 - brandWidth / 2, layout.photoY + layout.photoHeight * 0.055);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.76 * point.scale, true);
+    const point = elementPoint(settings, layout, "cameraBrand", layout.photoX + layout.photoWidth * 0.5, layout.photoY + layout.photoHeight * 0.055);
+    recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.76 * point.scale, true, "center");
   }
   if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", layout.photoX + layout.photoWidth * 0.5, layout.photoY + layout.photoHeight * 0.105, width * 0.3, contentHeight * 0.11, { align: "center", color: "rgba(255,255,255,.9)", weight: 600 });
   if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.28, width * 0.46, contentHeight * 0.095, { align: "center", color: "rgba(255,255,255,.65)", weight: 400, family: "Georgia, serif" });
   if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.5, y + height * 0.43, width * 0.34, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.68)", weight: 400 });
-  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
-  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.7, width * 0.1, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
-  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
-  if (showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.7, width * 0.11, contentHeight * 0.13, { align: "center", color: "#fff", weight: 700, family: "Georgia, serif" });
+  const parameterFamily = '"Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.7, width * 0.11, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
+  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.7, width * 0.1, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
+  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.7, width * 0.11, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
+  if (showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.7, width * 0.11, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
   if (showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.5, y + height * 0.9, width * 0.34, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.72)", weight: 450 });
   context.restore();
 }
@@ -999,9 +1004,9 @@ function drawSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem, se
   row("Shot On", "cameraModel", meta.model || "CAMERA", 0.83, showModel);
   if (showBrand) {
     const brandWidth = width * 0.7;
-    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.15, y + height * 0.93);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.17 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.34 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.82 * point.scale);
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.93);
+    recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.17 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.34 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.82 * point.scale, false, "center");
   }
   context.restore();
 }

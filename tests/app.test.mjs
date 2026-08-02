@@ -38,6 +38,9 @@ test("uses official logo assets and shared batch EXIF overrides", async () => {
     assert.match(page, new RegExp(`keywords: \\[.*${keyword}`));
   }
   assert.match(page, /brand\.value === "HONOR" \? 2 : 1/);
+  assert.match(page, /align: CanvasTextAlign = "left"/);
+  assert.match(page, /align === "center" \? x - drawWidth \/ 2/);
+  assert.match(page, /false, "center"/);
   assert.match(page, /"BKQ-AN90" \? "Magic 8 Pro"/);
   const filmStart = page.indexOf("function drawFilmBand");
   const filmEnd = page.indexOf("function renderPhoto", filmStart);
@@ -120,6 +123,8 @@ test("supports independent metadata switches, film workflow and movable elements
   for (const renderer of ["drawCenteredCard", "drawImmersiveCard", "drawSidecarCard"]) {
     assert.match(page, new RegExp(`function ${renderer}`));
   }
+  assert.match(page, /Segoe UI Variable Display/);
+  assert.match(page, /const parameterFamily =/);
 });
 
 test("starter preview markers are gone", async () => {
