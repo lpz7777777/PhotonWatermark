@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 
 test("ships all watermark presets and local export paths", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
-  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "editorial", "monolith", "archive", "centered", "immersive", "sidecar"]) {
+  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "northern-blue", "forest-gold", "editorial", "monolith", "archive", "centered", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`id: "${preset}"`));
   }
   for (const exifField of ["Make", "Model", "LensModel", "FNumber", "ExposureTime", "ISO", "FocalLength", "DateTimeOriginal"]) {
@@ -18,6 +18,11 @@ test("ships all watermark presets and local export paths", async () => {
   for (const bmpType of ["image/bmp", "image/x-bmp", "image/x-ms-bmp"]) assert.match(page, new RegExp(bmpType));
   assert.match(page, /jpe\?g\|png\|webp\|bmp/);
   assert.match(page, /\.webp,\.bmp/);
+  assert.match(page, /function decodeBmp/);
+  assert.match(page, /view\.getUint16\(0, true\) !== 0x4d42/);
+  assert.match(page, /\[1, 4, 8, 16, 24, 32\]\.includes\(bits\)/);
+  assert.match(page, /function loadBrowserImage/);
+  assert.doesNotMatch(page.slice(page.indexOf("async function readPhoto"), page.indexOf("function canvasToBlob")), /image\.decode\(\)/);
 });
 
 test("uses official logo assets and shared batch EXIF overrides", async () => {
@@ -133,11 +138,13 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /#ED0000/);
   assert.match(page, /#01916D/);
   assert.match(page, /#99D3C5/);
+  for (const theme of ["northern-blue", "forest-gold"]) assert.match(page, new RegExp(theme, "g"));
+  for (const color of ["#8EC5E8", "#174A7E", "#E4B538", "#356B45"]) assert.match(page, new RegExp(color, "i"));
   assert.match(page, /function drawThemeMicroDivider/);
   assert.match(page, /detailsSecondaryX - 0\.015/);
   assert.match(page, /scannerModelX - 0\.015/);
   assert.match(page, /settings\.showFilmName && settings\.filmShowIso/);
-  assert.match(page, /settings\.preset === "kodak" \|\| settings\.preset === "fujifilm" \? contentHeight \* 0\.055 : 0/);
+  assert.match(page, /isStripePreset\(settings\.preset\) \? contentHeight \* 0\.055 : 0/);
   assert.match(page, /const splitX = x \+ width \* 0\.287/);
   assert.match(page, /const stripeHeight = Math\.max\(6, layout\.photoHeight \* 0\.014\)/);
   assert.doesNotMatch(page, /fillRect\(x \+ width \* 0\.028/);

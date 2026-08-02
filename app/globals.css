@@ -542,6 +542,16 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .preset-swatch.fujifilm::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #01916d 0 28.7%, #99d3c5 28.7% 100%); }
 .preset-swatch.fujifilm i { left: 8px; width: 20px; height: 2px; bottom: 4px; background: #15120a; }
 .preset-swatch.fujifilm b { right: 8px; width: 29px; height: 2px; bottom: 4px; background: #5f625f; }
+.preset-swatch.northern-blue { background: #fff; }
+.preset-swatch.northern-blue::before { bottom: 11px; background: linear-gradient(145deg, #94bdd2, #dce9ed); }
+.preset-swatch.northern-blue::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #8ec5e8 0 28.7%, #174a7e 28.7% 100%); }
+.preset-swatch.northern-blue i { left: 8px; width: 20px; height: 2px; bottom: 4px; background: #101820; }
+.preset-swatch.northern-blue b { right: 8px; width: 29px; height: 2px; bottom: 4px; background: #566775; }
+.preset-swatch.forest-gold { background: #fff; }
+.preset-swatch.forest-gold::before { bottom: 11px; background: linear-gradient(145deg, #83966b, #dfd1a0); }
+.preset-swatch.forest-gold::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #e4b538 0 28.7%, #356b45 28.7% 100%); }
+.preset-swatch.forest-gold i { left: 8px; width: 20px; height: 2px; bottom: 4px; background: #121812; }
+.preset-swatch.forest-gold b { right: 8px; width: 29px; height: 2px; bottom: 4px; background: #607064; }
 .preset-swatch.editorial { background: #fff; }
 .preset-swatch.editorial::before { inset: 0 0 13px; background: linear-gradient(145deg, #a8aba4, #d9dbd5); }
 .preset-swatch.editorial::after { content: ""; position: absolute; left: 7px; bottom: 9px; width: 23px; height: 3px; background: linear-gradient(90deg, #8f1d22 0 25%, #111 25%); }

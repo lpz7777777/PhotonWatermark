@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as 
 import exifr from "exifr";
 import JSZip from "jszip";
 
-type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "editorial" | "monolith" | "archive" | "centered" | "immersive" | "sidecar";
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "northern-blue" | "forest-gold" | "editorial" | "monolith" | "archive" | "centered" | "immersive" | "sidecar";
 type ExportFormat = "png" | "jpeg";
 type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
 type LayoutKey = PresetId | `film-mode-${PresetId}` | `film-compact-${PresetId}`;
@@ -35,7 +35,7 @@ type PhotoItem = {
   id: string;
   file: File;
   url: string;
-  image: HTMLImageElement;
+  image: CanvasImageSource;
   width: number;
   height: number;
   metadata: PhotoMetadata;
@@ -121,6 +121,8 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "film", name: "胶片索引", note: "编辑感", swatch: "film" },
   { id: "kodak", name: "柯达胶片", note: "黄 · 红主题", swatch: "kodak" },
   { id: "fujifilm", name: "富士胶片", note: "高级绿主题", swatch: "fujifilm" },
+  { id: "northern-blue", name: "北境蓝调", note: "冰川蓝 · 深湖蓝", swatch: "northern-blue" },
+  { id: "forest-gold", name: "林野金绿", note: "暖金黄 · 森林绿", swatch: "forest-gold" },
   { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
   { id: "monolith", name: "静奢石碑", note: "暖白留白", swatch: "monolith" },
   { id: "archive", name: "影像档案", note: "理性秩序", swatch: "archive" },
@@ -130,6 +132,11 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
 ];
 
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/bmp", "image/x-bmp", "image/x-ms-bmp"]);
+const stripePresets: PresetId[] = ["kodak", "fujifilm", "northern-blue", "forest-gold"];
+
+function isStripePreset(preset: PresetId) {
+  return stripePresets.includes(preset);
+}
 
 type BrandDefinition = {
   value: string;
@@ -403,6 +410,24 @@ function themePalette(preset: PresetId): ThemePalette | undefined {
       accent: "#01916D",
     };
   }
+  if (preset === "northern-blue") {
+    return {
+      background: "#ffffff",
+      ink: "#101820",
+      muted: "#566775",
+      faint: "#8797a3",
+      accent: "#174A7E",
+    };
+  }
+  if (preset === "forest-gold") {
+    return {
+      background: "#ffffff",
+      ink: "#121812",
+      muted: "#607064",
+      faint: "#8b988b",
+      accent: "#356B45",
+    };
+  }
   if (preset === "editorial") {
     return { background: "#ffffff", ink: "#111111", muted: "#676962", faint: "#a0a29b", accent: "#8f1d22" };
   }
@@ -431,6 +456,16 @@ function drawThemeRules(context: CanvasRenderingContext2D, layout: Layout, theme
     context.fillStyle = "#01916D";
     context.fillRect(x, y, splitX - x, stripeHeight);
     context.fillStyle = "#99D3C5";
+    context.fillRect(splitX, y, x + width - splitX, stripeHeight);
+  } else if (preset === "northern-blue") {
+    context.fillStyle = "#8EC5E8";
+    context.fillRect(x, y, splitX - x, stripeHeight);
+    context.fillStyle = "#174A7E";
+    context.fillRect(splitX, y, x + width - splitX, stripeHeight);
+  } else if (preset === "forest-gold") {
+    context.fillStyle = "#E4B538";
+    context.fillRect(x, y, splitX - x, stripeHeight);
+    context.fillStyle = "#356B45";
     context.fillRect(splitX, y, x + width - splitX, stripeHeight);
   } else if (preset === "editorial") {
     context.fillStyle = "#111111";
@@ -709,7 +744,7 @@ function drawStandardBand(
 ) {
   const { bandX: x, bandY: baseY, bandWidth: width, bandHeight: height } = layout;
   const contentHeight = layout.photoHeight * 0.1612;
-  const contentOffsetY = settings.preset === "kodak" || settings.preset === "fujifilm" ? contentHeight * 0.055 : 0;
+  const contentOffsetY = isStripePreset(settings.preset) ? contentHeight * 0.055 : 0;
   const y = baseY + contentOffsetY;
   const ink = theme?.ink || (inverse ? "#f7f7f3" : "#111111");
   const muted = theme?.muted || (inverse ? "rgba(255,255,255,.68)" : "#5f625f");
@@ -766,7 +801,7 @@ function drawStandardBand(
   context.save();
   context.textBaseline = "middle";
 
-  if (theme && (settings.preset === "kodak" || settings.preset === "fujifilm")) {
+  if (theme && isStripePreset(settings.preset)) {
     if (settings.showModel && settings.showLens && meta.lens) {
       drawThemeMicroDivider(context, layout, theme, x + width * 0.435, y + height * 0.32, contentHeight * 0.15);
     }
@@ -841,7 +876,7 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   // Keep visual sizes anchored to the former 16.12% nameplate. Changing the
   // nameplate height only redistributes the row positions.
   const contentHeight = layout.photoHeight * 0.1612;
-  const contentOffsetY = settings.preset === "kodak" || settings.preset === "fujifilm" ? contentHeight * 0.055 : 0;
+  const contentOffsetY = isStripePreset(settings.preset) ? contentHeight * 0.055 : 0;
   const y = baseY + contentOffsetY;
   const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
   const scannerBrand = catalogInfo(scannerBrands, settings.scannerBrand);
@@ -941,7 +976,7 @@ function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem
   const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
   const meta = photo.filmMetadata;
   const contentHeight = layout.photoHeight * 0.1612;
-  const centerY = y + height * (settings.preset === "kodak" || settings.preset === "fujifilm" ? 0.59 : 0.52);
+  const centerY = y + height * (isStripePreset(settings.preset) ? 0.59 : 0.52);
   const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
   const ink = theme?.ink || (inverse ? "#ffffff" : "#171815");
   const muted = theme?.muted || (inverse ? "rgba(255,255,255,.66)" : "#696c65");
@@ -1280,13 +1315,106 @@ function drawSelectionOverlay(context: CanvasRenderingContext2D, bounds?: Elemen
   context.restore();
 }
 
+function isBmpFile(file: File) {
+  return (acceptedTypes.has(file.type) && file.type.toLowerCase().includes("bmp")) || /\.bmp$/i.test(file.name);
+}
+
+function decodeBmp(buffer: ArrayBuffer) {
+  const view = new DataView(buffer);
+  if (view.byteLength < 54 || view.getUint16(0, true) !== 0x4d42) throw new Error("BMP 文件头无效或文件已损坏");
+  const pixelOffset = view.getUint32(10, true);
+  const dibSize = view.getUint32(14, true);
+  if (dibSize < 40) throw new Error("暂不支持此旧版 BMP 格式");
+  const width = view.getInt32(18, true);
+  const signedHeight = view.getInt32(22, true);
+  const height = Math.abs(signedHeight);
+  const planes = view.getUint16(26, true);
+  const bits = view.getUint16(28, true);
+  const compression = view.getUint32(30, true);
+  if (planes !== 1 || width <= 0 || height <= 0 || width * height > 120_000_000) throw new Error("BMP 尺寸或色彩平面无效");
+  if (compression !== 0) throw new Error("暂不支持压缩型 BMP，请另存为标准 RGB BMP");
+  if (![1, 4, 8, 16, 24, 32].includes(bits)) throw new Error(`暂不支持 ${bits} 位 BMP`);
+
+  const rowStride = Math.floor((bits * width + 31) / 32) * 4;
+  if (pixelOffset + rowStride * height > view.byteLength) throw new Error("BMP 像素数据不完整");
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("浏览器无法建立 BMP 解码画布");
+  const output = context.createImageData(width, height);
+  const paletteStart = 14 + dibSize;
+  const colorsUsed = bits <= 8 ? (view.getUint32(46, true) || 2 ** bits) : 0;
+  if (colorsUsed && paletteStart + colorsUsed * 4 > pixelOffset) throw new Error("BMP 调色板无效");
+  const topDown = signedHeight < 0;
+
+  for (let targetY = 0; targetY < height; targetY += 1) {
+    const sourceY = topDown ? targetY : height - 1 - targetY;
+    const row = pixelOffset + sourceY * rowStride;
+    for (let x = 0; x < width; x += 1) {
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      if (bits <= 8) {
+        const packed = view.getUint8(row + Math.floor(x * bits / 8));
+        const shift = 8 - bits - (x * bits) % 8;
+        const index = (packed >> shift) & (2 ** bits - 1);
+        const palette = paletteStart + index * 4;
+        blue = view.getUint8(palette);
+        green = view.getUint8(palette + 1);
+        red = view.getUint8(palette + 2);
+      } else if (bits === 16) {
+        const pixel = view.getUint16(row + x * 2, true);
+        red = Math.round(((pixel >> 10) & 0x1f) * 255 / 31);
+        green = Math.round(((pixel >> 5) & 0x1f) * 255 / 31);
+        blue = Math.round((pixel & 0x1f) * 255 / 31);
+      } else {
+        const pixel = row + x * (bits / 8);
+        blue = view.getUint8(pixel);
+        green = view.getUint8(pixel + 1);
+        red = view.getUint8(pixel + 2);
+      }
+      const target = (targetY * width + x) * 4;
+      output.data[target] = red;
+      output.data[target + 1] = green;
+      output.data[target + 2] = blue;
+      output.data[target + 3] = 255;
+    }
+  }
+  context.putImageData(output, 0, 0);
+  return canvas;
+}
+
+function loadBrowserImage(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => image.naturalWidth && image.naturalHeight ? resolve(image) : reject(new Error("图片尺寸无效"));
+    image.onerror = () => reject(new Error("浏览器无法解码此图片"));
+    image.src = url;
+  });
+}
+
 async function readPhoto(file: File): Promise<PhotoItem> {
-  const url = URL.createObjectURL(file);
-  const image = new Image();
-  image.decoding = "async";
-  image.src = url;
+  let url = "";
   try {
-    await image.decode();
+    let image: CanvasImageSource;
+    let width: number;
+    let height: number;
+    if (isBmpFile(file)) {
+      const canvas = decodeBmp(await file.arrayBuffer());
+      const previewBlob = await canvasToBlob(canvas, "png");
+      url = URL.createObjectURL(previewBlob);
+      image = canvas;
+      width = canvas.width;
+      height = canvas.height;
+    } else {
+      url = URL.createObjectURL(file);
+      const browserImage = await loadBrowserImage(url);
+      image = browserImage;
+      width = browserImage.naturalWidth;
+      height = browserImage.naturalHeight;
+    }
     const raw = await exifr.parse(file, {
       pick: [
         "Make",
@@ -1302,9 +1430,10 @@ async function readPhoto(file: File): Promise<PhotoItem> {
         "CreateDate",
       ],
     }).catch(() => undefined);
+    const detectedModel = clean(raw?.Model);
     const metadata: PhotoMetadata = {
       make: clean(raw?.Make),
-      model: clean(raw?.Model).toUpperCase() === "BKQ-AN90" ? "Magic 8 Pro" : clean(raw?.Model),
+      model: detectedModel?.toUpperCase() === "BKQ-AN90" ? "Magic 8 Pro" : detectedModel,
       lens: clean(raw?.LensModel),
       aperture: numberString(raw?.FNumber),
       exposure: exposureString(raw?.ExposureTime),
@@ -1317,14 +1446,14 @@ async function readPhoto(file: File): Promise<PhotoItem> {
       file,
       url,
       image,
-      width: image.naturalWidth,
-      height: image.naturalHeight,
+      width,
+      height,
       metadata,
       filmMetadata: { ...defaultFilmMetadata },
       autoMetadata: { ...metadata },
     };
   } catch (error) {
-    URL.revokeObjectURL(url);
+    if (url) URL.revokeObjectURL(url);
     throw error;
   }
 }
@@ -1505,7 +1634,11 @@ export default function Home() {
       setPhotos((current) => [...current, ...loaded]);
       setSelectedId((current) => current || loaded[0].id);
     }
-    if (loaded.length !== candidates.length) setError(`${candidates.length - loaded.length} 张照片无法读取，已跳过。`);
+    const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failed.length) {
+      const detail = failed.length === 1 && failed[0].reason instanceof Error ? `：${failed[0].reason.message}` : "";
+      setError(`${failed.length} 张照片无法读取，已跳过${detail}`);
+    }
     setBusy("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
