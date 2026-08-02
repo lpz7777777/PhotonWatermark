@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as 
 import exifr from "exifr";
 import JSZip from "jszip";
 
-type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm";
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "editorial" | "monolith" | "archive";
 type ExportFormat = "png" | "jpeg";
 type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
 type LayoutKey = PresetId | `film-mode-${PresetId}`;
@@ -120,6 +120,9 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "film", name: "胶片索引", note: "编辑感", swatch: "film" },
   { id: "kodak", name: "柯达胶片", note: "黄 · 红主题", swatch: "kodak" },
   { id: "fujifilm", name: "富士胶片", note: "高级绿主题", swatch: "fujifilm" },
+  { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
+  { id: "monolith", name: "静奢石碑", note: "暖白留白", swatch: "monolith" },
+  { id: "archive", name: "影像档案", note: "理性秩序", swatch: "archive" },
 ];
 
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -392,6 +395,15 @@ function themePalette(preset: PresetId): ThemePalette | undefined {
       accent: "#01916D",
     };
   }
+  if (preset === "editorial") {
+    return { background: "#ffffff", ink: "#111111", muted: "#676962", faint: "#a0a29b", accent: "#8f1d22" };
+  }
+  if (preset === "monolith") {
+    return { background: "#f5f1e8", ink: "#171713", muted: "#69665f", faint: "#aaa59b", accent: "#a28349" };
+  }
+  if (preset === "archive") {
+    return { background: "#f8f8f5", ink: "#151613", muted: "#656860", faint: "#a4a79e", accent: "#3f5547" };
+  }
   return undefined;
 }
 
@@ -407,11 +419,31 @@ function drawThemeRules(context: CanvasRenderingContext2D, layout: Layout, theme
     context.fillRect(x, y, splitX - x, stripeHeight);
     context.fillStyle = "#ED0000";
     context.fillRect(splitX, y, x + width - splitX, stripeHeight);
-  } else {
+  } else if (preset === "fujifilm") {
     context.fillStyle = "#01916D";
     context.fillRect(x, y, splitX - x, stripeHeight);
     context.fillStyle = "#99D3C5";
     context.fillRect(splitX, y, x + width - splitX, stripeHeight);
+  } else if (preset === "editorial") {
+    context.fillStyle = "#111111";
+    context.fillRect(x + width * 0.03, y + height * 0.13, width * 0.16, Math.max(2, layout.photoHeight * 0.0012));
+    context.fillStyle = theme.accent;
+    context.fillRect(x + width * 0.03, y + height * 0.13, width * 0.018, Math.max(5, layout.photoHeight * 0.004));
+    context.fillStyle = "rgba(20,20,18,.12)";
+    context.fillRect(x + width * 0.555, y + height * 0.18, Math.max(1, layout.photoWidth * 0.0007), height * 0.64);
+  } else if (preset === "monolith") {
+    context.fillStyle = "rgba(35,32,26,.18)";
+    context.fillRect(x + width * 0.5, y + height * 0.2, Math.max(1, layout.photoWidth * 0.0006), height * 0.6);
+    context.fillStyle = theme.accent;
+    context.fillRect(x + width * 0.475, y + height * 0.13, width * 0.05, Math.max(3, layout.photoHeight * 0.002));
+  } else if (preset === "archive") {
+    context.strokeStyle = "rgba(30,34,29,.22)";
+    context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
+    context.strokeRect(x + width * 0.026, y + height * 0.17, width * 0.948, height * 0.66);
+    context.fillStyle = theme.accent;
+    context.beginPath();
+    context.arc(x + width * 0.044, y + height * 0.5, Math.max(3, layout.photoWidth * 0.003), 0, Math.PI * 2);
+    context.fill();
   }
   context.restore();
 }
@@ -547,31 +579,80 @@ function drawStandardBand(
 ) {
   const { bandX: x, bandY: baseY, bandWidth: width, bandHeight: height } = layout;
   const contentHeight = layout.photoHeight * 0.1612;
-  const contentOffsetY = theme ? contentHeight * 0.055 : 0;
+  const contentOffsetY = settings.preset === "kodak" || settings.preset === "fujifilm" ? contentHeight * 0.055 : 0;
   const y = baseY + contentOffsetY;
   const ink = theme?.ink || (inverse ? "#f7f7f3" : "#111111");
   const muted = theme?.muted || (inverse ? "rgba(255,255,255,.68)" : "#5f625f");
   const meta = photo.metadata;
+  const anchors = {
+    brandX: 0.032, brandY: 0.5, brandWidth: 0.18,
+    modelX: 0.28, modelY: 0.32, modelWidth: 0.16, modelSize: 0.16,
+    lensX: 0.45, lensY: 0.32, lensWidth: 0.25, lensSize: 0.13,
+    apertureX: 0.32, apertureY: 0.72,
+    exposureX: 0.41, exposureY: 0.72,
+    isoX: 0.5, isoY: 0.72,
+    focalX: 0.6, focalY: 0.72,
+    parameterAlign: "center" as CanvasTextAlign,
+    signatureX: 0.968, signatureY: 0.32, signatureWidth: 0.25,
+    dateX: 0.968, dateY: 0.72, dateWidth: 0.27,
+  };
+  if (settings.preset === "editorial") Object.assign(anchors, {
+    brandX: 0.03, brandY: 0.55, brandWidth: 0.16,
+    modelX: 0.225, modelY: 0.32, modelWidth: 0.29, modelSize: 0.19,
+    lensX: 0.225, lensY: 0.7, lensWidth: 0.29, lensSize: 0.115,
+    apertureX: 0.59, apertureY: 0.32, exposureX: 0.68, exposureY: 0.32,
+    isoX: 0.59, isoY: 0.7, focalX: 0.68, focalY: 0.7,
+    parameterAlign: "left",
+  });
+  if (settings.preset === "monolith") Object.assign(anchors, {
+    brandX: 0.035, brandY: 0.5, brandWidth: 0.15,
+    modelX: 0.22, modelY: 0.5, modelWidth: 0.22, modelSize: 0.18,
+    lensX: 0.54, lensY: 0.5, lensWidth: 0.18, lensSize: 0.12,
+    apertureX: 0.74, apertureY: 0.32, exposureX: 0.81, exposureY: 0.32,
+    isoX: 0.74, isoY: 0.7, focalX: 0.81, focalY: 0.7,
+    parameterAlign: "left",
+    signatureX: 0.965, signatureY: 0.32, dateX: 0.965, dateY: 0.7,
+  });
+  if (settings.preset === "archive") Object.assign(anchors, {
+    brandX: 0.06, brandY: 0.5, brandWidth: 0.13,
+    modelX: 0.23, modelY: 0.3, modelWidth: 0.25, modelSize: 0.17,
+    lensX: 0.23, lensY: 0.7, lensWidth: 0.25, lensSize: 0.115,
+    apertureX: 0.53, apertureY: 0.3, exposureX: 0.62, exposureY: 0.3,
+    isoX: 0.53, isoY: 0.7, focalX: 0.62, focalY: 0.7,
+    parameterAlign: "left",
+    signatureX: 0.95, signatureY: 0.3, dateX: 0.95, dateY: 0.7,
+  });
+  const advancedPortrait = layout.photoHeight > layout.photoWidth * 1.15 && ["editorial", "monolith", "archive"].includes(settings.preset);
+  if (advancedPortrait) Object.assign(anchors, {
+    brandX: 0.035, brandY: 0.5, brandWidth: 0.14,
+    modelX: 0.22, modelY: 0.3, modelWidth: 0.28, modelSize: 0.17,
+    lensX: 0.22, lensY: 0.7, lensWidth: 0.28, lensSize: 0.11,
+    apertureX: 0.55, apertureY: 0.3, exposureX: 0.65, exposureY: 0.3,
+    isoX: 0.55, isoY: 0.7, focalX: 0.65, focalY: 0.7,
+    parameterAlign: "left",
+    signatureX: 0.965, signatureY: 0.3, signatureWidth: 0.19,
+    dateX: 0.965, dateY: 0.7, dateWidth: 0.19,
+  });
   context.save();
   context.textBaseline = "middle";
 
   if (settings.showBrand) {
-    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.032, y + height * 0.5);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.28 * point.scale, width: width * 0.18 * point.scale, height: contentHeight * 0.56 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.18 * point.scale, contentHeight * point.scale, inverse);
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * anchors.brandX, y + height * anchors.brandY);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.28 * point.scale, width: width * anchors.brandWidth * point.scale, height: contentHeight * 0.56 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * anchors.brandWidth * point.scale, contentHeight * point.scale, inverse);
   }
 
-  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "相机型号未知", x + width * 0.28, y + height * 0.32, width * 0.16, contentHeight * 0.16, { color: ink, weight: 650 });
-  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.45, y + height * 0.32, width * 0.25, contentHeight * 0.13, { color: muted, weight: 400 });
-  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.32, y + height * 0.72, width * 0.08, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
-  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.41, y + height * 0.72, width * 0.08, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
-  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.5, y + height * 0.72, width * 0.09, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
-  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.6, y + height * 0.72, width * 0.09, contentHeight * 0.13, { align: "center", color: muted, weight: 500 });
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "相机型号未知", x + width * anchors.modelX, y + height * anchors.modelY, width * anchors.modelWidth, contentHeight * anchors.modelSize, { color: ink, weight: 650 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * anchors.lensX, y + height * anchors.lensY, width * anchors.lensWidth, contentHeight * anchors.lensSize, { color: muted, weight: 400 });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * anchors.apertureX, y + height * anchors.apertureY, width * 0.08, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * anchors.exposureX, y + height * anchors.exposureY, width * 0.08, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * anchors.isoX, y + height * anchors.isoY, width * 0.09, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * anchors.focalX, y + height * anchors.focalY, width * 0.09, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
 
-  const right = x + width * 0.968;
-  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * 0.32, width * 0.25, contentHeight * 0.14, { align: "right", color: ink, weight: 500 });
+  const right = x + width * anchors.signatureX;
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * anchors.signatureY, width * anchors.signatureWidth, contentHeight * 0.14, { align: "right", color: ink, weight: 500 });
   if (settings.showDate) {
-    drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), right, y + height * 0.72, width * 0.27, contentHeight * 0.13, { align: "right", color: muted, weight: 400 });
+    drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * anchors.dateX, y + height * anchors.dateY, width * anchors.dateWidth, contentHeight * 0.13, { align: "right", color: muted, weight: 400 });
   }
   context.restore();
 }
@@ -621,7 +702,7 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   // Keep visual sizes anchored to the former 16.12% nameplate. Changing the
   // nameplate height only redistributes the row positions.
   const contentHeight = layout.photoHeight * 0.1612;
-  const contentOffsetY = theme ? contentHeight * 0.055 : 0;
+  const contentOffsetY = settings.preset === "kodak" || settings.preset === "fujifilm" ? contentHeight * 0.055 : 0;
   const y = baseY + contentOffsetY;
   const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
   const scannerBrand = catalogInfo(scannerBrands, settings.scannerBrand);
@@ -629,18 +710,38 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   const muted = theme?.muted || (inverse ? "rgba(255,255,255,.62)" : "#62655d");
   const faint = theme?.faint || (inverse ? "rgba(255,255,255,.46)" : "#8b8d85");
   const accent = theme?.accent || (inverse ? "#d7ef3d" : "#758514");
-  const cameraLogoX = x + width * 0.035;
-  const detailsPrimaryX = x + width * 0.205;
-  const detailsSecondaryX = x + width * 0.39;
-  const scannerLogoX = x + width * 0.59;
-  const scannerModelX = x + width * 0.79;
-  const filmLogoX = x + width * 0.035;
+  const filmAnchors = {
+    cameraLogoX: 0.035, detailsPrimaryX: 0.205, detailsSecondaryX: 0.39,
+    scannerLogoX: 0.59, scannerModelX: 0.79, filmLogoX: 0.035,
+    labLabelX: 0.59, labNameX: 0.79, topRow: 0.29, bottomRow: 0.69,
+  };
+  if (settings.preset === "editorial") Object.assign(filmAnchors, {
+    cameraLogoX: 0.03, detailsPrimaryX: 0.235, detailsSecondaryX: 0.405,
+    scannerLogoX: 0.625, scannerModelX: 0.82, filmLogoX: 0.03,
+    labLabelX: 0.625, labNameX: 0.82, topRow: 0.34, bottomRow: 0.72,
+  });
+  if (settings.preset === "monolith") Object.assign(filmAnchors, {
+    cameraLogoX: 0.055, detailsPrimaryX: 0.24, detailsSecondaryX: 0.4,
+    scannerLogoX: 0.63, scannerModelX: 0.82, filmLogoX: 0.055,
+    labLabelX: 0.63, labNameX: 0.82, topRow: 0.31, bottomRow: 0.69,
+  });
+  if (settings.preset === "archive") Object.assign(filmAnchors, {
+    cameraLogoX: 0.065, detailsPrimaryX: 0.24, detailsSecondaryX: 0.385,
+    scannerLogoX: 0.61, scannerModelX: 0.79, filmLogoX: 0.065,
+    labLabelX: 0.61, labNameX: 0.79, topRow: 0.31, bottomRow: 0.69,
+  });
+  const cameraLogoX = x + width * filmAnchors.cameraLogoX;
+  const detailsPrimaryX = x + width * filmAnchors.detailsPrimaryX;
+  const detailsSecondaryX = x + width * filmAnchors.detailsSecondaryX;
+  const scannerLogoX = x + width * filmAnchors.scannerLogoX;
+  const scannerModelX = x + width * filmAnchors.scannerModelX;
+  const filmLogoX = x + width * filmAnchors.filmLogoX;
   const filmNameX = detailsPrimaryX;
   const filmIsoX = detailsSecondaryX;
-  const labLabelX = x + width * 0.59;
-  const labNameX = x + width * 0.79;
-  const topRow = y + height * 0.29;
-  const bottomRow = y + height * 0.69;
+  const labLabelX = x + width * filmAnchors.labLabelX;
+  const labNameX = x + width * filmAnchors.labNameX;
+  const topRow = y + height * filmAnchors.topRow;
+  const bottomRow = y + height * filmAnchors.bottomRow;
   const optionalRow = y + height * 0.91;
   context.save();
   context.textBaseline = "middle";
@@ -1169,8 +1270,21 @@ export default function Home() {
           <span><strong>Photon Frame</strong><small>光子水印</small></span>
         </a>
         <div className="privacy-note"><span aria-hidden="true">●</span> 本地处理 · 照片不会上传</div>
-        <button className="header-action" type="button" onClick={() => fileInputRef.current?.click()}>＋ 添加照片</button>
+        <div className="topbar-actions">
+          <label className={`top-film-switch ${settings.filmMode ? "active" : ""}`} title="切换普通 / 胶片信息布局">
+            <input className="visually-hidden" type="checkbox" checked={settings.filmMode} onChange={(event) => { const enabled = event.target.checked; setSettings((current) => ({ ...current, filmMode: enabled })); if (!enabled && !standardElementIds.includes(activeElement)) setActiveElement("cameraBrand"); }} />
+            <i aria-hidden="true" /><span>胶片模式</span>
+          </label>
+          <div className="top-format" role="group" aria-label="快捷选择导出格式">
+            <button type="button" className={settings.format === "png" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "png" }))}>PNG</button>
+            <button type="button" className={settings.format === "jpeg" ? "active" : ""} onClick={() => setSettings((current) => ({ ...current, format: "jpeg" }))}>JPG</button>
+          </div>
+          <button className="top-export" type="button" disabled={!selected || Boolean(busy)} onClick={() => void exportCurrent()}>{busy || "导出当前"}</button>
+          <button className="top-export batch" type="button" disabled={!photos.length || Boolean(busy)} onClick={() => void exportBatch()}>批量 ZIP <span>{photos.length || 0}</span></button>
+          <button className="header-action" type="button" onClick={() => fileInputRef.current?.click()}>＋ 添加照片</button>
+        </div>
       </header>
+      {error && <p className="global-error" role="alert">{error}</p>}
 
       <section className="intro" id="top">
         <div>
@@ -1285,7 +1399,6 @@ export default function Home() {
               <label><span><b>快门</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowExposure : settings.showExposure} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowExposure: checked } : { ...current, showExposure: checked }); }} /><i /></label>
               <label><span><b>拍摄日期</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowDate : settings.showDate} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowDate: checked } : { ...current, showDate: checked }); }} /><i /></label>
               <label><span><b>镜头信息</b><small>镜头型号与规格</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowLens : settings.showLens} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowLens: checked } : { ...current, showLens: checked }); }} /><i /></label>
-              <label className="film-master-toggle"><span><b>胶片信息模式</b><small>加入胶卷、冲洗与扫描信息布局</small></span><input type="checkbox" checked={settings.filmMode} onChange={(event) => { const enabled = event.target.checked; setSettings((current) => ({ ...current, filmMode: enabled })); if (!enabled && !standardElementIds.includes(activeElement)) setActiveElement("cameraBrand"); }} /><i /></label>
             </div>
 
             {settings.filmMode && (
@@ -1384,14 +1497,6 @@ export default function Home() {
             </section>
           </div>
 
-          <div className="export-area">
-            {error && <p className="error-message" role="alert">{error}</p>}
-            <button className="export-primary" type="button" disabled={!selected || Boolean(busy)} onClick={() => void exportCurrent()}>
-              <span>{busy || `导出当前${settings.format === "png" ? "无损 PNG" : "最高质量 JPEG"}`}</span><b aria-hidden="true">↓</b>
-            </button>
-            <button className="export-secondary" type="button" disabled={!photos.length || Boolean(busy)} onClick={() => void exportBatch()}>批量导出 ZIP <span>{photos.length || 0}</span></button>
-            <p>导出时保留原照片像素，不进行缩放。</p>
-          </div>
         </aside>
       </section>
 

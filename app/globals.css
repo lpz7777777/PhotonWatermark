@@ -109,6 +109,35 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 
 .privacy-note span { color: #5c971e; margin-right: 7px; }
 
+.topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.top-film-switch {
+  height: 38px;
+  padding: 0 12px 0 8px;
+  border: 1px solid #d5d6cf;
+  border-radius: 999px;
+  background: rgba(255,255,255,.72);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #555850;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.top-film-switch i { width: 22px; height: 13px; border-radius: 999px; background: #d3d5cd; position: relative; transition: .2s ease; }
+.top-film-switch i::after { content: ""; position: absolute; width: 9px; height: 9px; left: 2px; top: 2px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.16); transition: .2s ease; }
+.top-film-switch.active { border-color: #b6c35e; background: #f2f5dc; color: #39420f; }
+.top-film-switch.active i { background: #a9bf19; }
+.top-film-switch.active i::after { transform: translateX(9px); }
+.top-format { height: 38px; padding: 3px; display: flex; border-radius: 999px; background: #e7e7e1; }
+.top-format button { min-width: 38px; border: 0; border-radius: 999px; background: transparent; color: #777970; font-size: 9px; font-weight: 700; cursor: pointer; }
+.top-format button.active { background: #fff; color: #171815; box-shadow: 0 1px 5px rgba(20,21,18,.09); }
+.top-export { height: 38px; border: 1px solid #d3d4cd; border-radius: 999px; padding: 0 13px; background: #fff; color: #31332e; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.top-export:hover:not(:disabled) { border-color: #9cac24; color: #596a0e; }
+.top-export:disabled { opacity: .42; cursor: not-allowed; }
+.top-export span { display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 3px; border-radius: 50%; background: #ecece6; font-size: 8px; }
+.global-error { position: fixed; top: 86px; right: 24px; z-index: 30; max-width: 420px; margin: 0; padding: 10px 13px; border-radius: 9px; background: #fff0ed; color: #a33b2c; box-shadow: 0 8px 28px rgba(60,25,20,.16); font-size: 10px; }
+
 .header-action {
   border: 0;
   background: var(--ink);
@@ -476,6 +505,21 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .preset-swatch.fujifilm::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #01916d 0 28.7%, #99d3c5 28.7% 100%); }
 .preset-swatch.fujifilm i { left: 8px; width: 20px; height: 2px; bottom: 4px; background: #15120a; }
 .preset-swatch.fujifilm b { right: 8px; width: 29px; height: 2px; bottom: 4px; background: #5f625f; }
+.preset-swatch.editorial { background: #fff; }
+.preset-swatch.editorial::before { inset: 0 0 13px; background: linear-gradient(145deg, #a8aba4, #d9dbd5); }
+.preset-swatch.editorial::after { content: ""; position: absolute; left: 7px; bottom: 9px; width: 23px; height: 3px; background: linear-gradient(90deg, #8f1d22 0 25%, #111 25%); }
+.preset-swatch.editorial i { left: 8px; width: 30px; height: 2px; bottom: 4px; background: #181915; }
+.preset-swatch.editorial b { right: 8px; width: 22px; height: 2px; bottom: 4px; background: #92958c; }
+.preset-swatch.monolith { background: #f5f1e8; }
+.preset-swatch.monolith::before { inset: 0 0 13px; background: linear-gradient(145deg, #aaa79d, #ddd8cd); }
+.preset-swatch.monolith::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 1px; height: 9px; background: rgba(30,27,22,.28); }
+.preset-swatch.monolith i { left: calc(50% - 10px); width: 20px; height: 2px; bottom: 9px; background: #a28349; }
+.preset-swatch.monolith b { right: 8px; width: 24px; height: 2px; bottom: 4px; background: #5d5a54; }
+.preset-swatch.archive { background: #f8f8f5; }
+.preset-swatch.archive::before { inset: 0 0 13px; background: linear-gradient(145deg, #8e958f, #d2d7d2); }
+.preset-swatch.archive::after { content: ""; position: absolute; inset: auto 6px 3px; height: 7px; border: 1px solid rgba(32,39,34,.28); }
+.preset-swatch.archive i { left: 8px; width: 4px; height: 4px; bottom: 5px; border-radius: 50%; background: #3f5547; }
+.preset-swatch.archive b { right: 9px; width: 26px; height: 2px; bottom: 6px; background: #767b74; }
 
 .section-heading.sub { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 22px; }
 .field-label, .range-heading { font-size: 10px; font-weight: 700; display: block; margin-bottom: 8px; }
@@ -587,6 +631,7 @@ footer p { margin: 0; }
 footer a { color: inherit; text-decoration: none; }
 
 @media (max-width: 1180px) {
+  .privacy-note { display: none; }
   .studio { margin-left: 18px; margin-right: 18px; grid-template-columns: 140px minmax(390px, 1fr); }
   .control-scroll { grid-template-columns: 1fr 1fr; }
   .style-controls { grid-column: 1 / -1; }
@@ -594,7 +639,9 @@ footer a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width: 900px) {
-  .privacy-note { display: none; }
+  .topbar { padding-left: 18px; padding-right: 18px; }
+  .topbar-actions { gap: 5px; }
+  .top-export, .top-film-switch { padding-left: 9px; padding-right: 9px; }
   .intro { align-items: flex-start; flex-direction: column; gap: 20px; }
   .intro-copy { width: min(520px, 100%); }
   .studio { display: grid; grid-template-columns: 110px minmax(0, 1fr); }
@@ -609,9 +656,16 @@ footer a { color: inherit; text-decoration: none; }
 }
 
 @media (max-width: 620px) {
-  .topbar { height: 64px; padding: 0 16px; }
-  .brand-lockup small { display: none; }
-  .header-action { padding: 10px 13px; }
+  .topbar { height: 64px; padding: 0 9px; gap: 6px; }
+  .brand-lockup { flex: 0 0 auto; }
+  .brand-lockup > span:last-child { display: none; }
+  .brand-glyph { width: 34px; height: 34px; }
+  .topbar-actions { flex: 1; overflow-x: auto; justify-content: flex-end; scrollbar-width: none; }
+  .topbar-actions::-webkit-scrollbar { display: none; }
+  .top-format { display: none; }
+  .top-film-switch, .top-export, .header-action { height: 34px; flex: 0 0 auto; font-size: 9px; }
+  .top-export { padding: 0 9px; }
+  .header-action { padding: 8px 11px; }
   .intro { padding: 36px 18px 28px; min-height: 220px; }
   .intro h1 { font-size: 42px; }
   .studio { margin: 0 10px 50px; grid-template-columns: 1fr; border-radius: 14px; }

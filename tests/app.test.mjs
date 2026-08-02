@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 
 test("ships all watermark presets and local export paths", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
-  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm"]) {
+  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "editorial", "monolith", "archive"]) {
     assert.match(page, new RegExp(`id: "${preset}"`));
   }
   for (const exifField of ["Make", "Model", "LensModel", "FNumber", "ExposureTime", "ISO", "FocalLength", "DateTimeOriginal"]) {
@@ -77,8 +77,8 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /filmBandSize: 12/);
   assert.match(page, /activeBandSize = settings\.filmMode \? settings\.filmBandSize : settings\.bandSize/);
   assert.match(page, /const contentHeight = layout\.photoHeight \* 0\.1612/);
-  assert.match(page, /cameraModel[\s\S]*x \+ width \* 0\.28[\s\S]*lens[\s\S]*x \+ width \* 0\.45/);
-  for (const parameterX of ["0.32", "0.41", "0.5", "0.6"]) assert.match(page, new RegExp(`x \\+ width \\* ${parameterX.replace(".", "\\.")}`));
+  assert.match(page, /modelX: 0\.28[\s\S]*lensX: 0\.45/);
+  for (const parameterX of ["0.32", "0.41", "0.5", "0.6"]) assert.match(page, new RegExp(`[A-Za-z]+X: ${parameterX.replace(".", "\\.")}`));
   assert.match(page, /filmMetadata: \{ \.\.\.defaultFilmMetadata \}/);
   for (const filmDefault of ['make: "OLYMPUS"', 'model: "OM-1"', 'lens: "50mm/1.8"', 'iso: "100"']) {
     assert.match(page, new RegExp(filmDefault.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -95,10 +95,18 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /#ED0000/);
   assert.match(page, /#01916D/);
   assert.match(page, /#99D3C5/);
-  assert.match(page, /const contentOffsetY = theme \? contentHeight \* 0\.055 : 0/);
+  assert.match(page, /settings\.preset === "kodak" \|\| settings\.preset === "fujifilm" \? contentHeight \* 0\.055 : 0/);
   assert.match(page, /const splitX = x \+ width \* 0\.287/);
   assert.match(page, /const stripeHeight = Math\.max\(6, layout\.photoHeight \* 0\.014\)/);
   assert.doesNotMatch(page, /fillRect\(x \+ width \* 0\.028/);
+  for (const advancedPreset of ["editorial", "monolith", "archive"]) {
+    assert.match(page, new RegExp(`settings\\.preset === "${advancedPreset}"`));
+    assert.match(page, new RegExp(`preset === "${advancedPreset}"`));
+  }
+  assert.match(page, /className="topbar-actions"/);
+  assert.match(page, /className="top-export"/);
+  assert.match(page, /className="top-export batch"/);
+  assert.match(page, /className=\{`top-film-switch/);
 });
 
 test("starter preview markers are gone", async () => {
