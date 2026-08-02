@@ -15,6 +15,9 @@ test("ships all watermark presets and local export paths", async () => {
   assert.match(page, /canvas\.toBlob/);
   assert.match(page, /image\/png/);
   assert.match(page, /compression: "STORE"/);
+  for (const bmpType of ["image/bmp", "image/x-bmp", "image/x-ms-bmp"]) assert.match(page, new RegExp(bmpType));
+  assert.match(page, /jpe\?g\|png\|webp\|bmp/);
+  assert.match(page, /\.webp,\.bmp/);
 });
 
 test("uses official logo assets and shared batch EXIF overrides", async () => {

@@ -129,7 +129,7 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "sidecar", name: "侧栏档案", note: "右侧参数栏", swatch: "sidecar" },
 ];
 
-const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/bmp", "image/x-bmp", "image/x-ms-bmp"]);
 
 type BrandDefinition = {
   value: string;
@@ -1488,9 +1488,9 @@ export default function Home() {
 
   async function addFiles(fileList: FileList | File[]) {
     setError("");
-    const candidates = Array.from(fileList).filter((file) => acceptedTypes.has(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name));
+    const candidates = Array.from(fileList).filter((file) => acceptedTypes.has(file.type) || /\.(jpe?g|png|webp|bmp)$/i.test(file.name));
     if (!candidates.length) {
-      setError("请选择 JPEG、PNG 或 WebP 图片。相机原片建议使用 JPEG，以便读取完整 EXIF。 ");
+      setError("请选择 JPEG、PNG、WebP 或 BMP 图片。相机原片建议使用 JPEG，以便读取完整 EXIF。 ");
       return;
     }
     setBusy(`正在读取 ${candidates.length} 张照片…`);
@@ -1749,7 +1749,7 @@ export default function Home() {
         <p className="intro-copy">自动读取相机、镜头、光圈、快门、ISO、焦距与拍摄时间。原图不缩放，导出完整分辨率。</p>
       </section>
 
-      <input ref={fileInputRef} className="visually-hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onChange={handleInput} />
+      <input ref={fileInputRef} className="visually-hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/bmp,image/x-bmp,image/x-ms-bmp,.jpg,.jpeg,.png,.webp,.bmp" onChange={handleInput} />
 
       <section className="studio" aria-label="水印工作台">
         <aside className="photo-rail">
