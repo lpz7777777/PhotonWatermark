@@ -74,8 +74,17 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /Shift\+F/);
   assert.match(page, /top-compact-toggle/);
   assert.match(page, /settings\.filmMode && settings\.filmCompact/);
-  assert.match(page, /const dividerXs = \[0\.18, 0\.325, 0\.545, 0\.705, 0\.875\]/);
+  assert.match(page, /const dividerXs = \[0\.16, 0\.285, 0\.54, 0\.695, 0\.825\]/);
   assert.doesNotMatch(page.slice(page.indexOf("function drawCompactFilmBand"), page.indexOf("function drawCenteredCard")), /scannerName|labName/);
+  assert.match(page, /const drawWorkflowDivider =/);
+  assert.match(page, /x \+ width \* 0\.555/);
+  assert.match(page, /function drawFilmSidecarCard/);
+  assert.match(page, /settings\.filmMode\) drawFilmSidecarCard/);
+  assert.match(page, /settings\.filmMode\) drawFilmWorkflowBand\(context, photo, settings, layout\)/);
+  const sidecarFilm = page.slice(page.indexOf("function drawFilmSidecarCard"), page.indexOf("function renderPhoto"));
+  for (const optionalFilmField of ["filmShowDate", "filmShowAperture", "filmShowExposure", "filmShowFocalLength", "filmShowSignature"]) {
+    assert.match(sidecarFilm, new RegExp(`settings\\.${optionalFilmField}`));
+  }
   assert.match(page, /handleElementPointerDown/);
   assert.match(page, /onPointerMove=\{handleElementPointerMove\}/);
   assert.match(page, /onDoubleClick=\{handleElementDoubleClick\}/);

@@ -848,21 +848,22 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   context.save();
   context.textBaseline = "middle";
 
-  if (theme && (settings.preset === "kodak" || settings.preset === "fujifilm")) {
-    const detailsDividerX = x + width * (filmAnchors.detailsSecondaryX - 0.015);
-    const workflowDividerX = x + width * (filmAnchors.scannerModelX - 0.015);
-    if (settings.filmShowModel && settings.filmShowLens && meta.lens) {
-      drawThemeMicroDivider(context, layout, theme, detailsDividerX, topRow, contentHeight * 0.15);
-    }
-    if (settings.showFilmName && settings.filmShowIso) {
-      drawThemeMicroDivider(context, layout, theme, detailsDividerX, bottomRow, contentHeight * 0.15);
-    }
-    if (settings.showScanner) {
-      drawThemeMicroDivider(context, layout, theme, workflowDividerX, topRow, contentHeight * 0.15);
-    }
-    if (settings.showLab) {
-      drawThemeMicroDivider(context, layout, theme, workflowDividerX, bottomRow, contentHeight * 0.15);
-    }
+  const dividerColor = theme?.accent || (inverse ? "#ffffff" : "#343630");
+  const drawWorkflowDivider = (dividerX: number, centerY: number, dividerHeight: number, emphasis = false) => {
+    context.save();
+    context.globalAlpha = emphasis ? (theme ? 0.38 : 0.2) : (theme ? 0.3 : 0.14);
+    context.fillStyle = dividerColor;
+    context.fillRect(dividerX, centerY - dividerHeight / 2, Math.max(1, layout.photoWidth * 0.00065), dividerHeight);
+    context.restore();
+  };
+  const detailsDividerX = x + width * (filmAnchors.detailsSecondaryX - 0.015);
+  const workflowDividerX = x + width * (filmAnchors.scannerModelX - 0.015);
+  if (settings.filmShowModel && settings.filmShowLens && meta.lens) drawWorkflowDivider(detailsDividerX, topRow, contentHeight * 0.15);
+  if (settings.showFilmName && settings.filmShowIso) drawWorkflowDivider(detailsDividerX, bottomRow, contentHeight * 0.15);
+  if (settings.showScanner) drawWorkflowDivider(workflowDividerX, topRow, contentHeight * 0.15);
+  if (settings.showLab) drawWorkflowDivider(workflowDividerX, bottomRow, contentHeight * 0.15);
+  if ((settings.filmShowBrand || settings.showFilmBrand) && (settings.showScanner || settings.showLab)) {
+    drawWorkflowDivider(x + width * 0.555, y + height * 0.5, contentHeight * 0.48, true);
   }
 
   if (settings.filmShowBrand) {
@@ -909,10 +910,10 @@ function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem
   const muted = theme?.muted || (inverse ? "rgba(255,255,255,.66)" : "#696c65");
   const dividerColor = theme?.accent || (inverse ? "#ffffff" : "#272923");
   const anchors = {
-    cameraLogo: 0.03, cameraModel: 0.205, lens: 0.35,
-    filmLogo: 0.575, filmName: 0.735, iso: 0.905,
+    cameraLogo: 0.035, cameraModel: 0.18, lens: 0.31,
+    filmLogo: 0.6, filmName: 0.715, iso: 0.845,
   };
-  const dividerXs = [0.18, 0.325, 0.545, 0.705, 0.875];
+  const dividerXs = [0.16, 0.285, 0.54, 0.695, 0.825];
 
   context.save();
   context.textBaseline = "middle";
@@ -925,18 +926,18 @@ function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem
 
   if (settings.filmShowBrand) {
     const point = elementPoint(settings, layout, "cameraBrand", x + width * anchors.cameraLogo, centerY);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.13 * point.scale, height: contentHeight * 0.36 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.13 * point.scale, contentHeight * 0.7 * point.scale, inverse);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.105 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.105 * point.scale, contentHeight * 0.7 * point.scale, inverse);
   }
-  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * anchors.cameraModel, centerY, width * 0.095, contentHeight * 0.13, { color: ink, weight: 700 });
-  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * anchors.lens, centerY, width * 0.16, contentHeight * 0.115, { color: muted, weight: 450 });
+  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * anchors.cameraModel, centerY, width * 0.08, contentHeight * 0.13, { color: ink, weight: 700 });
+  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * anchors.lens, centerY, width * 0.17, contentHeight * 0.115, { color: muted, weight: 450 });
   if (settings.showFilmBrand) {
     const point = elementPoint(settings, layout, "filmBrand", x + width * anchors.filmLogo, centerY);
-    recordElementBounds("filmBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.095 * point.scale, height: contentHeight * 0.36 * point.scale });
-    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.095 * point.scale, contentHeight * 0.58 * point.scale, inverse);
+    recordElementBounds("filmBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.075 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.075 * point.scale, contentHeight * 0.58 * point.scale, inverse);
   }
-  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", x + width * anchors.filmName, centerY, width * 0.11, contentHeight * 0.135, { color: ink, weight: 700 });
-  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * anchors.iso, centerY, width * 0.07, contentHeight * 0.115, { color: muted, weight: 600 });
+  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", x + width * anchors.filmName, centerY, width * 0.095, contentHeight * 0.135, { color: ink, weight: 700 });
+  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * anchors.iso, centerY, width * 0.1, contentHeight * 0.115, { color: muted, weight: 600 });
   context.restore();
 }
 
@@ -1071,6 +1072,67 @@ function drawSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem, se
   context.restore();
 }
 
+function drawFilmSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.filmMetadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const centerX = x + width * 0.5;
+  const label = (text: string, position: number) => drawTextFit(context, text, centerX, y + height * position, width * 0.76, contentHeight * 0.075, { align: "center", color: "#a0a39b", weight: 700 });
+  const rule = (position: number) => {
+    context.strokeStyle = "rgba(30,31,27,.14)";
+    context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
+    context.beginPath();
+    context.moveTo(x + width * 0.13, y + height * position);
+    context.lineTo(x + width * 0.87, y + height * position);
+    context.stroke();
+  };
+  context.save();
+  context.textBaseline = "middle";
+  context.fillStyle = "#ffffff";
+  context.fillRect(x, y, width, height);
+
+  if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), centerX, y + height * 0.03, width * 0.72, contentHeight * 0.075, { align: "center", color: "#a0a39b", weight: 450 });
+  label("CAMERA", 0.07);
+  if (settings.filmShowBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", centerX, y + height * 0.145);
+    recordElementBounds("cameraBrand", { x: point.x - width * 0.34 * point.scale, y: point.y - contentHeight * 0.16 * point.scale, width: width * 0.68 * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.68 * point.scale, contentHeight * 0.68 * point.scale, false, "center");
+  }
+  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", centerX, y + height * 0.215, width * 0.72, contentHeight * 0.13, { align: "center", color: "#1e201c", weight: 700 });
+  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, centerX, y + height * 0.265, width * 0.76, contentHeight * 0.105, { align: "center", color: "#777a72", weight: 450 });
+  if (settings.filmShowAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.25, y + height * 0.298, width * 0.2, contentHeight * 0.075, { align: "center", color: "#8b8e86", weight: 550 });
+  if (settings.filmShowExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.5, y + height * 0.298, width * 0.2, contentHeight * 0.075, { align: "center", color: "#8b8e86", weight: 550 });
+  if (settings.filmShowFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.75, y + height * 0.298, width * 0.2, contentHeight * 0.075, { align: "center", color: "#8b8e86", weight: 550 });
+  rule(0.315);
+
+  label("FILM STOCK", 0.37);
+  if (settings.showFilmBrand) {
+    const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
+    const point = elementPoint(settings, layout, "filmBrand", centerX, y + height * 0.445);
+    recordElementBounds("filmBrand", { x: point.x - width * 0.19 * point.scale, y: point.y - contentHeight * 0.16 * point.scale, width: width * 0.38 * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.38 * point.scale, contentHeight * 0.58 * point.scale, false, "center");
+  }
+  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", centerX, y + height * 0.515, width * 0.72, contentHeight * 0.135, { align: "center", color: "#1e201c", weight: 700 });
+  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, centerX, y + height * 0.565, width * 0.52, contentHeight * 0.105, { align: "center", color: "#777a72", weight: 550 });
+  rule(0.62);
+
+  if (settings.showScanner) {
+    label("SCANNED WITH", 0.675);
+    const scannerBrand = catalogInfo(scannerBrands, settings.scannerBrand);
+    const point = elementPoint(settings, layout, "scanner", centerX, y + height * 0.75);
+    recordElementBounds("scanner", { x: point.x - width * 0.34 * point.scale, y: point.y - contentHeight * 0.16 * point.scale, width: width * 0.68 * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawLogoDefinition(context, scannerBrand, point.x, point.y, width * 0.68 * point.scale, contentHeight * 0.62 * point.scale, false, "center");
+    drawElementText(context, settings, layout, "scanner", settings.scannerName || "FILM SCANNER", centerX, y + height * 0.815, width * 0.72, contentHeight * 0.11, { align: "center", color: "#555850", weight: 600 });
+  }
+  rule(0.855);
+  if (settings.showLab) {
+    label("DEVELOPED BY", 0.9);
+    drawElementText(context, settings, layout, "lab", settings.labName || "YOUR FILM LAB", centerX, y + height * 0.955, width * 0.76, contentHeight * 0.12, { align: "center", color: "#1e201c", weight: 650 });
+  }
+  if (settings.filmShowSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, centerX, y + height * 0.988, width * 0.72, contentHeight * 0.07, { align: "center", color: "#8b8e86", weight: 450 });
+  context.restore();
+}
+
 function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, collectBounds = false): RenderedPhoto {
   const fullLayout = getLayout(photo, settings, 1);
   const scale = maxEdge ? Math.min(1, maxEdge / Math.max(fullLayout.width, fullLayout.height)) : 1;
@@ -1116,11 +1178,21 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     if (theme) drawThemeRules(context, layout, theme, settings.preset);
     drawCompactFilmBand(context, photo, settings, layout, compactInverse, theme);
   } else if (settings.preset === "centered") {
-    drawCenteredCard(context, photo, settings, layout);
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout);
+    else drawCenteredCard(context, photo, settings, layout);
   } else if (settings.preset === "immersive") {
-    drawImmersiveCard(context, photo, settings, layout);
+    if (settings.filmMode) {
+      const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.65, 0, layout.bandY + layout.bandHeight);
+      gradient.addColorStop(0, "rgba(0,0,0,0)");
+      gradient.addColorStop(0.46, "rgba(0,0,0,.26)");
+      gradient.addColorStop(1, "rgba(0,0,0,.84)");
+      context.fillStyle = gradient;
+      context.fillRect(layout.bandX, layout.bandY - layout.bandHeight * 0.65, layout.bandWidth, layout.bandHeight * 1.65);
+      drawFilmWorkflowBand(context, photo, settings, layout, true);
+    } else drawImmersiveCard(context, photo, settings, layout);
   } else if (settings.preset === "sidecar") {
-    drawSidecarCard(context, photo, settings, layout);
+    if (settings.filmMode) drawFilmSidecarCard(context, photo, settings, layout);
+    else drawSidecarCard(context, photo, settings, layout);
   } else if (settings.preset === "overlay") {
     const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.35, 0, layout.bandY + layout.bandHeight);
     gradient.addColorStop(0, "rgba(0,0,0,0)");
