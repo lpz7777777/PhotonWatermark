@@ -2218,7 +2218,7 @@ export default function Home() {
                   <span>拍摄地点</span>
                   <input value={selectedMetadata?.location || ""} placeholder="地点 / 城市名称" onChange={(event) => updateSharedMetadata("location", event.target.value)} />
                 </label>
-                <p className="trademark-note">有 GPS 的照片会自动识别城市；地点数据由 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> 提供，也可以随时手动修改。</p>
+                <p className="trademark-note">有 GPS 时会把坐标发送给 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> 识别城市，照片本身不会上传；结果可以随时手动修改。</p>
                 <p className="trademark-note">Logo 来自厂商官网，商标权归各厂商所有；没有内置图标的品牌会显示厂商名称。</p>
               </div>
               </section>
