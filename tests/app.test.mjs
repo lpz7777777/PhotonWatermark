@@ -195,8 +195,10 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.doesNotMatch(floating, /"cameraModel"|"lens"/);
   const floatingLayout = page.slice(page.indexOf('if (settings.preset === "floating")'), page.indexOf('if (settings.preset === "cinematic")'));
   assert.match(floatingLayout, /photoHeight \* 0\.2/);
-  assert.match(page, /paintShadowLayer\("rgba\(30,35,30,\.24\)"/);
-  assert.match(page, /paintShadowLayer\("rgba\(25,29,25,\.2\)"/);
+  assert.match(page, /paintShadowLayer\("rgba\(30,35,30,\.3\)"[\s\S]*photoWidth \* 0\.052/);
+  assert.match(page, /paintShadowLayer\("rgba\(25,29,25,\.22\)"[\s\S]*photoWidth \* 0\.018/);
+  assert.match(page, /brightness\(\.68\) saturate\(\.9\)/);
+  assert.match(page, /backdrop\.addColorStop\(1, "rgba\(7,10,9,\.48\)"\)/);
   const centered = page.slice(page.indexOf("function drawCenteredCard"), page.indexOf("function drawFloatingCard"));
   assert.match(centered, /\[0\.2725, 0\.74\]/);
   assert.match(centered, /const dividerCenterY = parameterBaselineY - contentHeight \* 0\.037/);

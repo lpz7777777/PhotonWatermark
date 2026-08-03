@@ -1333,13 +1333,13 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   context.fillRect(0, 0, layout.width, layout.height);
   if (settings.preset === "cinematic") {
     context.save();
-    context.filter = `blur(${Math.max(18, layout.photoWidth * 0.025)}px) brightness(.46) saturate(.72)`;
+    context.filter = `blur(${Math.max(14, layout.photoWidth * 0.018)}px) brightness(.68) saturate(.9)`;
     drawImageCover(context, photo.image, photo.width, photo.height, -layout.width * 0.04, -layout.height * 0.04, layout.width * 1.08, layout.height * 1.08);
     context.restore();
     const backdrop = context.createLinearGradient(0, layout.photoHeight * 0.45, 0, layout.height);
-    backdrop.addColorStop(0, "rgba(7,10,9,.08)");
-    backdrop.addColorStop(0.65, "rgba(7,10,9,.5)");
-    backdrop.addColorStop(1, "rgba(7,10,9,.78)");
+    backdrop.addColorStop(0, "rgba(7,10,9,.03)");
+    backdrop.addColorStop(0.65, "rgba(7,10,9,.26)");
+    backdrop.addColorStop(1, "rgba(7,10,9,.48)");
     context.fillStyle = backdrop;
     context.fillRect(0, 0, layout.width, layout.height);
   }
@@ -1355,8 +1355,8 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
       context.fill();
       context.restore();
     };
-    paintShadowLayer("rgba(30,35,30,.24)", Math.max(22, layout.photoWidth * 0.038), Math.max(12, layout.photoHeight * 0.02));
-    paintShadowLayer("rgba(25,29,25,.2)", Math.max(8, layout.photoWidth * 0.012), Math.max(5, layout.photoHeight * 0.008));
+    paintShadowLayer("rgba(30,35,30,.3)", Math.max(28, layout.photoWidth * 0.052), Math.max(16, layout.photoHeight * 0.028));
+    paintShadowLayer("rgba(25,29,25,.22)", Math.max(10, layout.photoWidth * 0.018), Math.max(7, layout.photoHeight * 0.012));
     context.save();
     roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, radius);
     context.clip();
