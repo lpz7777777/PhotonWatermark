@@ -6,9 +6,10 @@ const root = new URL("../", import.meta.url);
 
 test("ships all watermark presets and local export paths", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
-  for (const preset of ["classic", "noir", "gallery", "overlay", "film", "kodak", "fujifilm", "northern-blue", "forest-gold", "editorial", "monolith", "archive", "centered", "immersive", "sidecar"]) {
+  for (const preset of ["classic", "centered", "floating", "cinematic", "noir", "gallery", "overlay", "kodak", "fujifilm", "northern-blue", "forest-gold", "editorial", "monolith", "archive", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`id: "${preset}"`));
   }
+  assert.doesNotMatch(page, /id: "film"/);
   for (const exifField of ["Make", "Model", "LensModel", "FNumber", "ExposureTime", "ISO", "FocalLength", "DateTimeOriginal"]) {
     assert.match(page, new RegExp(`"${exifField}"`));
   }
@@ -62,9 +63,8 @@ test("uses official logo assets and shared batch EXIF overrides", async () => {
   assert.match(page, /align === "center" \? x - drawWidth \/ 2/);
   assert.match(page, /false, "center"/);
   assert.match(page, /"BKQ-AN90" \? "Magic 8 Pro"/);
-  const filmStart = page.indexOf("function drawFilmBand");
-  const filmEnd = page.indexOf("function renderPhoto", filmStart);
-  assert.match(page.slice(filmStart, filmEnd), /drawBrand\(context, meta\.make/);
+  assert.match(page, /function drawFloatingCard/);
+  assert.match(page, /function drawCinematicCard/);
 });
 
 test("static GitHub Pages build is portable", async () => {
@@ -82,6 +82,8 @@ test("supports independent metadata switches, film workflow and movable elements
     assert.match(page, new RegExp(`${field}: boolean`));
     assert.match(page, new RegExp(`settings\\.${field}`));
   }
+  assert.match(page, /showLocationByPreset: Partial<Record<PresetId, boolean>>/);
+  assert.match(page, /settings\.showLocationByPreset/);
   for (const asset of ["kodak.png", "lucky.png", "noritsu.svg", "fujifilm.svg"]) {
     assert.match(page, new RegExp(asset.replace(".", "\\.")));
     await access(new URL(`public/brands/${asset}`, root));
@@ -94,7 +96,7 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /Shift\+F/);
   assert.match(page, /top-compact-toggle/);
   assert.match(page, /settings\.filmMode && settings\.filmCompact/);
-  assert.match(page, /const dividerXs = \[0\.16, 0\.285, 0\.54, 0\.695, 0\.825\]/);
+  assert.match(page, /locationVisible\(settings\) \? \[0\.16, 0\.285, 0\.54, 0\.695, 0\.815, 0\.915\]/);
   assert.doesNotMatch(page.slice(page.indexOf("function drawCompactFilmBand"), page.indexOf("function drawCenteredCard")), /scannerName|labName/);
   assert.match(page, /const drawWorkflowDivider =/);
   assert.match(page, /x \+ width \* 0\.555/);
@@ -162,9 +164,15 @@ test("supports independent metadata switches, film workflow and movable elements
   for (const referencePreset of ["centered", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`settings\\.preset === "${referencePreset}"`));
   }
-  for (const renderer of ["drawCenteredCard", "drawImmersiveCard", "drawSidecarCard"]) {
+  for (const renderer of ["drawCenteredCard", "drawFloatingCard", "drawCinematicCard", "drawImmersiveCard", "drawSidecarCard"]) {
     assert.match(page, new RegExp(`function ${renderer}`));
   }
+  assert.match(page, /location: "拍摄地点"/);
+  assert.match(page, /locationVisible\(settings\)/);
+  assert.match(page, /"latitude"/);
+  assert.match(page, /"longitude"/);
+  assert.match(page, /nominatim\.openstreetmap\.org\/reverse/);
+  assert.match(page, /showLocationByPreset: \{ centered: true \}/);
   assert.match(page, /Segoe UI Variable Display/);
   assert.match(page, /const parameterFamily =/);
 });

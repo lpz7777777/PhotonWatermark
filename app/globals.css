@@ -528,10 +528,16 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .preset-swatch.overlay::before { inset: 0; background: linear-gradient(180deg, #abb39a, #5b6255); }
 .preset-swatch.overlay::after { content: ""; position: absolute; inset: 45% 0 0; background: linear-gradient(transparent, rgba(0,0,0,.78)); }
 .preset-swatch.overlay i, .preset-swatch.overlay b { background: white; z-index: 1; }
-.preset-swatch.film { background: #121211; }
-.preset-swatch.film::before { bottom: 15px; filter: saturate(.65) contrast(1.15); }
-.preset-swatch.film i { background: var(--acid); }
-.preset-swatch.film b { background: white; }
+.preset-swatch.floating { background: #fff; padding: 7px 8px 17px; }
+.preset-swatch.floating::before { inset: 6px 8px 17px; border-radius: 2px; box-shadow: 0 5px 7px rgba(23,28,24,.24); background: linear-gradient(145deg, #c2c7bd, #e9e4da); }
+.preset-swatch.floating::after { content: ""; position: absolute; left: 42%; right: 42%; bottom: 10px; height: 3px; border-radius: 50%; background: #c71f2e; }
+.preset-swatch.floating i { left: 26px; width: 27px; height: 2px; bottom: 5px; background: #242621; }
+.preset-swatch.floating b { right: 26px; width: 27px; height: 2px; bottom: 5px; background: #777a72; }
+.preset-swatch.cinematic { background: linear-gradient(150deg, #495048, #111713); }
+.preset-swatch.cinematic::before { inset: 5px 6px 17px; border-radius: 5px; box-shadow: 0 5px 9px rgba(0,0,0,.45); background: linear-gradient(145deg, #b48743, #35463c 55%, #101714); }
+.preset-swatch.cinematic::after { content: ""; position: absolute; left: 36%; right: 36%; bottom: 10px; height: 3px; background: #fff; }
+.preset-swatch.cinematic i { left: 25px; width: 29px; height: 2px; bottom: 5px; background: #fff; }
+.preset-swatch.cinematic b { right: 25px; width: 29px; height: 2px; bottom: 5px; background: rgba(255,255,255,.5); }
 .preset-swatch.kodak { background: #fff; }
 .preset-swatch.kodak::before { bottom: 11px; background: linear-gradient(145deg, #c9bea0, #f1e3ad); }
 .preset-swatch.kodak::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #ffb700 0 28.7%, #ed0000 28.7% 100%); }
@@ -641,6 +647,7 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .brand-editor select:focus, .metadata-field input:focus, .metadata-field select:focus { border-color: #9dad31; box-shadow: 0 0 0 2px rgba(183, 207, 43, .14); }
 .metadata-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .trademark-note { margin: 2px 0 0; color: #999b93; font-size: 7px; line-height: 1.55; }
+.trademark-note a { color: #65721f; text-decoration: underline; text-underline-offset: 2px; }
 
 .element-editor { padding: 13px; border: 1px solid #dedfd7; border-radius: 10px; background: #f1f0ea; display: grid; gap: 10px; }
 .element-editor > p { margin: 0; color: #7d8077; font-size: 8px; line-height: 1.55; }

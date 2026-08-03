@@ -4,9 +4,9 @@ import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as 
 import exifr from "exifr";
 import JSZip from "jszip";
 
-type PresetId = "classic" | "noir" | "gallery" | "overlay" | "film" | "kodak" | "fujifilm" | "northern-blue" | "forest-gold" | "editorial" | "monolith" | "archive" | "centered" | "immersive" | "sidecar";
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "kodak" | "fujifilm" | "northern-blue" | "forest-gold" | "editorial" | "monolith" | "archive" | "centered" | "floating" | "cinematic" | "immersive" | "sidecar";
 type ExportFormat = "png" | "jpeg";
-type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "filmBrand" | "filmName" | "lab" | "scanner";
+type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "location" | "filmBrand" | "filmName" | "lab" | "scanner";
 type LayoutKey = PresetId | `film-mode-${PresetId}` | `film-compact-${PresetId}`;
 
 type ElementTransform = {
@@ -29,6 +29,7 @@ type PhotoMetadata = {
   iso?: string;
   focalLength?: string;
   takenAt?: string;
+  location?: string;
 };
 
 type PhotoItem = {
@@ -41,6 +42,7 @@ type PhotoItem = {
   metadata: PhotoMetadata;
   filmMetadata: PhotoMetadata;
   autoMetadata: PhotoMetadata;
+  coordinates?: { latitude: number; longitude: number };
 };
 
 const defaultFilmMetadata: PhotoMetadata = {
@@ -52,6 +54,7 @@ const defaultFilmMetadata: PhotoMetadata = {
   iso: "100",
   focalLength: "",
   takenAt: "",
+  location: "地点",
 };
 
 type Settings = {
@@ -68,6 +71,7 @@ type Settings = {
   showExposure: boolean;
   showIso: boolean;
   showFocalLength: boolean;
+  showLocationByPreset: Partial<Record<PresetId, boolean>>;
   filmMode: boolean;
   filmCompact: boolean;
   filmShowSignature: boolean;
@@ -115,10 +119,12 @@ type ThemePalette = {
 
 const presets: Array<{ id: PresetId; name: string; note: string; swatch: string }> = [
   { id: "classic", name: "经典铭牌", note: "还原样片", swatch: "classic" },
+  { id: "centered", name: "纯白画册", note: "居中信息卡", swatch: "centered" },
+  { id: "floating", name: "浮光画册", note: "悬浮留白", swatch: "floating" },
+  { id: "cinematic", name: "暮色浮影", note: "柔焦暗场", swatch: "cinematic" },
   { id: "noir", name: "夜黑铭牌", note: "高反差", swatch: "noir" },
   { id: "gallery", name: "画廊相框", note: "四周留白", swatch: "gallery" },
   { id: "overlay", name: "渐变叠印", note: "不增加尺寸", swatch: "overlay" },
-  { id: "film", name: "胶片索引", note: "编辑感", swatch: "film" },
   { id: "kodak", name: "柯达胶片", note: "黄 · 红主题", swatch: "kodak" },
   { id: "fujifilm", name: "富士胶片", note: "高级绿主题", swatch: "fujifilm" },
   { id: "northern-blue", name: "北境蓝调", note: "冰川蓝 · 深湖蓝", swatch: "northern-blue" },
@@ -126,16 +132,48 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
   { id: "monolith", name: "静奢石碑", note: "暖白留白", swatch: "monolith" },
   { id: "archive", name: "影像档案", note: "理性秩序", swatch: "archive" },
-  { id: "centered", name: "纯白画册", note: "居中信息卡", swatch: "centered" },
   { id: "immersive", name: "沉浸底片", note: "画内叠印", swatch: "immersive" },
   { id: "sidecar", name: "侧栏档案", note: "右侧参数栏", swatch: "sidecar" },
 ];
 
 const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/bmp", "image/x-bmp", "image/x-ms-bmp"]);
 const stripePresets: PresetId[] = ["kodak", "fujifilm", "northern-blue", "forest-gold"];
+const locationCache = new Map<string, string>();
+let geocodeQueue: Promise<void> = Promise.resolve();
+let lastGeocodeAt = 0;
 
 function isStripePreset(preset: PresetId) {
   return stripePresets.includes(preset);
+}
+
+function locationVisible(settings: Settings) {
+  return settings.showLocationByPreset[settings.preset] ?? settings.preset === "centered";
+}
+
+function reverseGeocodeCity(latitude: number, longitude: number) {
+  const key = `${latitude.toFixed(3)},${longitude.toFixed(3)}`;
+  const cached = locationCache.get(key);
+  if (cached) return Promise.resolve(cached);
+  let resolveResult: (value: string) => void = () => undefined;
+  const result = new Promise<string>((resolve) => { resolveResult = resolve; });
+  geocodeQueue = geocodeQueue.then(async () => {
+    const remaining = 1100 - (Date.now() - lastGeocodeAt);
+    if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+    lastGeocodeAt = Date.now();
+    try {
+      const query = new URLSearchParams({ format: "geocodejson", lat: latitude.toString(), lon: longitude.toString(), zoom: "10", addressdetails: "1", "accept-language": "zh-CN,zh,en" });
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query.toString()}`, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("地点识别服务暂时不可用");
+      const payload = await response.json() as { features?: Array<{ properties?: { geocoding?: Record<string, string> } }> };
+      const address = payload.features?.[0]?.properties?.geocoding || {};
+      const city = clean(address.city || address.town || address.municipality || address.village || address.county || address.state) || "地点";
+      locationCache.set(key, city);
+      resolveResult(city);
+    } catch {
+      resolveResult("地点");
+    }
+  });
+  return result;
 }
 
 type BrandDefinition = {
@@ -193,15 +231,16 @@ const elementLabels: Record<ElementId, string> = {
   focalLength: "焦距",
   signature: "签名",
   date: "拍摄日期",
+  location: "拍摄地点",
   filmBrand: "胶卷厂商 Logo",
   filmName: "胶卷名称",
   lab: "冲洗店名称",
   scanner: "扫描仪 Logo 与名称",
 };
 
-const standardElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "signature", "date"];
+const standardElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "signature", "date", "location"];
 const filmElementIds: ElementId[] = [...standardElementIds, "filmBrand", "filmName", "lab", "scanner"];
-const compactFilmElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "filmBrand", "filmName", "iso"];
+const compactFilmElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "filmBrand", "filmName", "iso", "location"];
 const defaultTransform: ElementTransform = { x: 0, y: 0, scale: 1, fontScale: 1 };
 let collectingElementBounds: ElementBoundsMap | null = null;
 
@@ -391,6 +430,13 @@ function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, wi
   context.closePath();
 }
 
+function drawImageCover(context: CanvasRenderingContext2D, image: CanvasImageSource, sourceWidth: number, sourceHeight: number, x: number, y: number, width: number, height: number) {
+  const scale = Math.max(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
 function themePalette(preset: PresetId): ThemePalette | undefined {
   if (preset === "kodak") {
     return {
@@ -500,6 +546,7 @@ function drawLogoDefinition(
   height: number,
   inverse = false,
   align: CanvasTextAlign = "left",
+  forceMonochrome = false,
 ) {
   const image = logoCache.get(brand.value);
   context.save();
@@ -554,7 +601,7 @@ function drawLogoDefinition(
       }
     }
 
-    const renderAsMask = brand.monochrome || (inverse && (brand.inverseMonochrome || brand.value === "FUJIFILM"));
+    const renderAsMask = forceMonochrome || brand.monochrome || (inverse && (brand.inverseMonochrome || brand.value === "FUJIFILM"));
     if (renderAsMask) {
       const mask = document.createElement("canvas");
       mask.width = Math.max(1, Math.round(drawWidth));
@@ -597,8 +644,9 @@ function drawBrand(
   height: number,
   inverse = false,
   align: CanvasTextAlign = "left",
+  forceMonochrome = false,
 ) {
-  drawLogoDefinition(context, brandInfo(make, model), x, y, maxWidth, height, inverse, align);
+  drawLogoDefinition(context, brandInfo(make, model), x, y, maxWidth, height, inverse, align, forceMonochrome);
 }
 
 function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
@@ -620,6 +668,40 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
       bandY: photoHeight + margin,
       bandWidth: photoWidth,
       bandHeight: baseBand,
+    };
+  }
+
+  if (settings.preset === "floating") {
+    const margin = Math.max(30, Math.round(Math.min(photoWidth, photoHeight) * 0.07));
+    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.27));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin + cardBand,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: photoHeight + margin,
+      bandWidth: photoWidth,
+      bandHeight: cardBand,
+    };
+  }
+
+  if (settings.preset === "cinematic") {
+    const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.025));
+    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.25));
+    return {
+      width: photoWidth + margin * 2,
+      height: photoHeight + margin + cardBand,
+      photoX: margin,
+      photoY: margin,
+      photoWidth,
+      photoHeight,
+      bandX: margin,
+      bandY: photoHeight + margin,
+      bandWidth: photoWidth,
+      bandHeight: cardBand,
     };
   }
 
@@ -822,51 +904,13 @@ function drawStandardBand(
   if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * anchors.exposureX, y + height * anchors.exposureY, width * 0.08, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
   if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * anchors.isoX, y + height * anchors.isoY, width * 0.09, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
   if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * anchors.focalX, y + height * anchors.focalY, width * 0.09, contentHeight * 0.13, { align: anchors.parameterAlign, color: muted, weight: 500 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.77, y + height * anchors.dateY, width * 0.12, contentHeight * 0.12, { align: "center", color: muted, weight: 450 });
 
   const right = x + width * anchors.signatureX;
   if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * anchors.signatureY, width * anchors.signatureWidth, contentHeight * 0.14, { align: "right", color: ink, weight: 500 });
   if (settings.showDate) {
     drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * anchors.dateX, y + height * anchors.dateY, width * anchors.dateWidth, contentHeight * 0.13, { align: "right", color: muted, weight: 400 });
   }
-  context.restore();
-}
-
-function drawFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
-  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
-  const contentHeight = layout.photoHeight * 0.1612;
-  const meta = photo.metadata;
-  const left = x + width * 0.035;
-  const right = x + width * 0.965;
-  context.save();
-  context.textBaseline = "middle";
-  context.fillStyle = "#10100f";
-  context.fillRect(x, y, width, height);
-  if (settings.showBrand) {
-    const point = elementPoint(settings, layout, "cameraBrand", left, y + height * 0.22);
-    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.2 * point.scale, width: width * 0.18 * point.scale, height: contentHeight * 0.4 * point.scale });
-    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.18 * point.scale, contentHeight * 0.62 * point.scale, true);
-  }
-  context.fillStyle = "#d8ff42";
-  context.fillRect(left + width * 0.2, y + height * 0.2, width * 0.026, Math.max(3, contentHeight * 0.025));
-  drawTextFit(context, "FRAME  ·  01", left + width * 0.235, y + height * 0.21, width * 0.12, contentHeight * 0.105, {
-    color: "#d8ff42",
-    weight: 700,
-  });
-  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), left, y + height * 0.65, width * 0.22, contentHeight * 0.28, { color: "#ffffff", weight: 400 });
-  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "UNKNOWN CAMERA", x + width * 0.36, y + height * 0.35, width * 0.34, contentHeight * 0.15, { color: "#ffffff", weight: 600 });
-  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.36, y + height * 0.58, width * 0.38, contentHeight * 0.105, { color: "rgba(255,255,255,.6)", weight: 400 });
-  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.36, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
-  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.47, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
-  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.58, y + height * 0.79, width * 0.09, contentHeight * 0.105, { color: "rgba(255,255,255,.68)", weight: 500 });
-  drawTextFit(context, photo.file.name.toUpperCase(), right, y + height * 0.37, width * 0.26, contentHeight * 0.1, {
-    align: "right",
-    color: "rgba(255,255,255,.68)",
-    weight: 600,
-  });
-  if (settings.showDate) {
-    drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), right, y + height * 0.66, width * 0.27, contentHeight * 0.12, { align: "right", color: "#ffffff", weight: 400 });
-  }
-  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, right, y + height * 0.86, width * 0.26, contentHeight * 0.105, { align: "right", color: "rgba(255,255,255,.62)", weight: 500 });
   context.restore();
 }
 
@@ -968,6 +1012,7 @@ function drawFilmWorkflowBand(context: CanvasRenderingContext2D, photo: PhotoIte
   if (settings.filmShowExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), cameraLogoX + width * 0.09, optionalRow, width * 0.08, contentHeight * 0.095, { color: accent, weight: 600 });
   if (settings.filmShowFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), cameraLogoX + width * 0.18, optionalRow, width * 0.07, contentHeight * 0.095, { color: accent, weight: 600 });
   if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), scannerLogoX, optionalRow, width * 0.2, contentHeight * 0.085, { color: faint, weight: 400 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", scannerLogoX + width * 0.21, optionalRow, width * 0.13, contentHeight * 0.085, { color: faint, weight: 450 });
   if (settings.filmShowSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.97, optionalRow, width * 0.2, contentHeight * 0.085, { align: "right", color: muted, weight: 500 });
   context.restore();
 }
@@ -983,9 +1028,9 @@ function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem
   const dividerColor = theme?.accent || (inverse ? "#ffffff" : "#272923");
   const anchors = {
     cameraLogo: 0.035, cameraModel: 0.18, lens: 0.31,
-    filmLogo: 0.6, filmName: 0.715, iso: 0.845,
+    filmLogo: 0.6, filmName: 0.715, iso: 0.835, location: 0.94,
   };
-  const dividerXs = [0.16, 0.285, 0.54, 0.695, 0.825];
+  const dividerXs = locationVisible(settings) ? [0.16, 0.285, 0.54, 0.695, 0.815, 0.915] : [0.16, 0.285, 0.54, 0.695, 0.825];
 
   context.save();
   context.textBaseline = "middle";
@@ -1010,6 +1055,7 @@ function drawCompactFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem
   }
   if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "FILM STOCK", x + width * anchors.filmName, centerY, width * 0.095, contentHeight * 0.135, { color: ink, weight: 700 });
   if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * anchors.iso, centerY, width * 0.1, contentHeight * 0.115, { color: muted, weight: 600 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * anchors.location, centerY, width * 0.09, contentHeight * 0.105, { align: "center", color: muted, weight: 500 });
   context.restore();
 }
 
@@ -1050,7 +1096,68 @@ function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.67, width * 0.09, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
   if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
   if (showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.67, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.85, y + height * 0.67, width * 0.18, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
   if (showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.87, width * 0.42, contentHeight * 0.105, { align: "center", color: "#30312c", weight: 450 });
+  context.restore();
+}
+
+function drawFloatingCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const rowY = y + height * 0.67;
+  context.save();
+  context.fillStyle = "#ffffff";
+  context.fillRect(x, y, width, height);
+  if (settings.showBrand) {
+    const brandWidth = width * 0.15;
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.19);
+    recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.7 * point.scale, false, "center");
+  }
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.5, y + height * 0.34, width * 0.38, contentHeight * 0.105, { align: "center", color: "#20211e", weight: 650 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.47, width * 0.48, contentHeight * 0.085, { align: "center", color: "#85867f", weight: 400 });
+  context.strokeStyle = "rgba(29,30,27,.22)";
+  context.lineWidth = Math.max(1, layout.photoWidth * 0.0005);
+  for (const dividerX of locationVisible(settings) ? [0.275, 0.755] : [0.275]) {
+    context.beginPath();
+    context.moveTo(x + width * dividerX, rowY - contentHeight * 0.085);
+    context.lineTo(x + width * dividerX, rowY + contentHeight * 0.085);
+    context.stroke();
+  }
+  if (settings.showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.16, rowY, width * 0.21, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 450 });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.35, rowY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.46, rowY, width * 0.09, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.57, rowY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, rowY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.86, rowY, width * 0.17, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 450 });
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.88, width * 0.42, contentHeight * 0.105, { align: "center", color: "#383934", weight: 450 });
+  context.restore();
+}
+
+function drawCinematicCard(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  context.save();
+  if (settings.showBrand) {
+    const brandWidth = width * 0.18;
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.2);
+    recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.75 * point.scale, true, "center", true);
+  }
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.42, y + height * 0.38, width * 0.27, contentHeight * 0.09, { align: "right", color: "rgba(255,255,255,.72)", weight: 550 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.58, y + height * 0.38, width * 0.27, contentHeight * 0.085, { color: "rgba(255,255,255,.56)", weight: 400 });
+  const parameterFamily = '"Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.6, width * 0.1, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  const locationX = settings.showDate ? 0.42 : 0.5;
+  const dateX = locationVisible(settings) ? 0.62 : 0.5;
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * locationX, y + height * 0.79, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.62)", weight: 400, family: "Georgia, serif" });
+  if (settings.showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * dateX, y + height * 0.79, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.58)", weight: 400 });
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.92, width * 0.34, contentHeight * 0.075, { align: "center", color: "rgba(255,255,255,.5)", weight: 450 });
   context.restore();
 }
 
@@ -1082,7 +1189,8 @@ function drawImmersiveCard(context: CanvasRenderingContext2D, photo: PhotoItem, 
   }
   if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", layout.photoX + layout.photoWidth * 0.5, layout.photoY + layout.photoHeight * 0.105, width * 0.3, contentHeight * 0.11, { align: "center", color: "rgba(255,255,255,.9)", weight: 600 });
   if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.28, width * 0.46, contentHeight * 0.095, { align: "center", color: "rgba(255,255,255,.65)", weight: 400, family: "Georgia, serif" });
-  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.5, y + height * 0.43, width * 0.34, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.68)", weight: 400 });
+  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * (locationVisible(settings) ? 0.61 : 0.5), y + height * 0.43, width * 0.26, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.68)", weight: 400 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.39, y + height * 0.43, width * 0.25, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.68)", weight: 400 });
   const parameterFamily = '"Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
   if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.7, width * 0.11, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
   if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.7, width * 0.1, contentHeight * 0.125, { align: "center", color: "#fff", weight: 650, family: parameterFamily });
@@ -1128,7 +1236,8 @@ function drawSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem, se
     context.stroke();
   }
   row("Taken At", "date", formatDate(meta.takenAt), 0.18, showDate);
-  row("Lens", "lens", meta.lens || "—", 0.27, showLens);
+  row("Location", "location", meta.location || "地点", 0.24, locationVisible(settings));
+  row("Lens", "lens", meta.lens || "—", 0.3, showLens);
   row("Focal", "focalLength", formatFocal(meta.focalLength), 0.39, showFocal);
   row("Aperture", "aperture", formatAperture(meta.aperture), 0.47, showAperture);
   row("Shutter", "exposure", formatExposure(meta.exposure), 0.55, showExposure);
@@ -1163,7 +1272,8 @@ function drawFilmSidecarCard(context: CanvasRenderingContext2D, photo: PhotoItem
   context.fillStyle = "#ffffff";
   context.fillRect(x, y, width, height);
 
-  if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), centerX, y + height * 0.03, width * 0.72, contentHeight * 0.075, { align: "center", color: "#a0a39b", weight: 450 });
+  if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * (locationVisible(settings) ? 0.32 : 0.5), y + height * 0.03, width * 0.42, contentHeight * 0.075, { align: "center", color: "#a0a39b", weight: 450 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.72, y + height * 0.03, width * 0.34, contentHeight * 0.075, { align: "center", color: "#a0a39b", weight: 450 });
   label("CAMERA", 0.07);
   if (settings.filmShowBrand) {
     const point = elementPoint(settings, layout, "cameraBrand", centerX, y + height * 0.145);
@@ -1220,12 +1330,32 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   context.imageSmoothingQuality = "high";
 
   const theme = themePalette(settings.preset);
-  const background = theme?.background || (settings.preset === "noir" || settings.preset === "film" ? "#10100f" : settings.preset === "gallery" ? "#f2efe7" : "#ffffff");
+  const background = theme?.background || (settings.preset === "noir" || settings.preset === "cinematic" ? "#101311" : settings.preset === "gallery" ? "#f2efe7" : "#ffffff");
   context.fillStyle = background;
   context.fillRect(0, 0, layout.width, layout.height);
-  if (settings.preset === "centered") {
+  if (settings.preset === "cinematic") {
     context.save();
-    roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, Math.max(10, layout.photoWidth * 0.018));
+    context.filter = `blur(${Math.max(18, layout.photoWidth * 0.025)}px) brightness(.46) saturate(.72)`;
+    drawImageCover(context, photo.image, photo.width, photo.height, -layout.width * 0.04, -layout.height * 0.04, layout.width * 1.08, layout.height * 1.08);
+    context.restore();
+    const backdrop = context.createLinearGradient(0, layout.photoHeight * 0.45, 0, layout.height);
+    backdrop.addColorStop(0, "rgba(7,10,9,.08)");
+    backdrop.addColorStop(0.65, "rgba(7,10,9,.5)");
+    backdrop.addColorStop(1, "rgba(7,10,9,.78)");
+    context.fillStyle = backdrop;
+    context.fillRect(0, 0, layout.width, layout.height);
+  }
+  if (settings.preset === "centered" || settings.preset === "floating" || settings.preset === "cinematic") {
+    const radius = settings.preset === "floating" ? Math.max(3, layout.photoWidth * 0.004) : Math.max(10, layout.photoWidth * 0.018);
+    context.save();
+    context.shadowColor = settings.preset === "cinematic" ? "rgba(0,0,0,.5)" : "rgba(24,27,24,.28)";
+    context.shadowBlur = Math.max(12, layout.photoWidth * 0.025);
+    context.shadowOffsetY = Math.max(8, layout.photoHeight * 0.014);
+    context.fillStyle = "#ffffff";
+    roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, radius);
+    context.fill();
+    context.shadowColor = "transparent";
+    roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, radius);
     context.clip();
     context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
     context.restore();
@@ -1234,7 +1364,7 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   }
 
   if (settings.filmMode && settings.filmCompact) {
-    const compactInverse = settings.preset === "overlay" || settings.preset === "immersive" || settings.preset === "film" || settings.preset === "noir";
+    const compactInverse = settings.preset === "overlay" || settings.preset === "immersive" || settings.preset === "cinematic" || settings.preset === "noir";
     if (settings.preset === "overlay" || settings.preset === "immersive") {
       const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.45, 0, layout.bandY + layout.bandHeight);
       gradient.addColorStop(0, "rgba(0,0,0,0)");
@@ -1252,6 +1382,12 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   } else if (settings.preset === "centered") {
     if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout);
     else drawCenteredCard(context, photo, settings, layout);
+  } else if (settings.preset === "floating") {
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout);
+    else drawFloatingCard(context, photo, settings, layout);
+  } else if (settings.preset === "cinematic") {
+    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, true);
+    else drawCinematicCard(context, photo, settings, layout);
   } else if (settings.preset === "immersive") {
     if (settings.filmMode) {
       const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.65, 0, layout.bandY + layout.bandHeight);
@@ -1277,9 +1413,6 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, true);
     else drawStandardBand(context, photo, settings, layout, true);
     context.shadowBlur = 0;
-  } else if (settings.preset === "film") {
-    if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout, true);
-    else drawFilmBand(context, photo, settings, layout);
   } else {
     if (settings.preset === "gallery") {
       context.fillStyle = "rgba(30,30,25,.15)";
@@ -1428,9 +1561,13 @@ async function readPhoto(file: File): Promise<PhotoItem> {
         "FocalLength",
         "DateTimeOriginal",
         "CreateDate",
+        "latitude",
+        "longitude",
       ],
     }).catch(() => undefined);
     const detectedModel = clean(raw?.Model);
+    const latitude = asNumber(raw?.latitude);
+    const longitude = asNumber(raw?.longitude);
     const metadata: PhotoMetadata = {
       make: clean(raw?.Make),
       model: detectedModel?.toUpperCase() === "BKQ-AN90" ? "Magic 8 Pro" : detectedModel,
@@ -1440,6 +1577,7 @@ async function readPhoto(file: File): Promise<PhotoItem> {
       iso: numberString(raw?.ISO ?? raw?.ISOSpeedRatings ?? raw?.PhotographicSensitivity),
       focalLength: numberString(raw?.FocalLength),
       takenAt: dateInputString(raw?.DateTimeOriginal instanceof Date ? raw.DateTimeOriginal : raw?.CreateDate),
+      location: "地点",
     };
     return {
       id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
@@ -1451,6 +1589,7 @@ async function readPhoto(file: File): Promise<PhotoItem> {
       metadata,
       filmMetadata: { ...defaultFilmMetadata },
       autoMetadata: { ...metadata },
+      coordinates: latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
     };
   } catch (error) {
     if (url) URL.revokeObjectURL(url);
@@ -1498,6 +1637,7 @@ function editableValueForElement(element: ElementId, photo: PhotoItem | undefine
     iso: "iso",
     focalLength: "focalLength",
     date: "takenAt",
+    location: "location",
   };
   const field = fieldMap[element];
   const metadata = settings.filmMode ? photo.filmMetadata : photo.metadata;
@@ -1529,6 +1669,7 @@ export default function Home() {
     showExposure: true,
     showIso: true,
     showFocalLength: true,
+    showLocationByPreset: { centered: true },
     filmMode: false,
     filmCompact: false,
     filmShowSignature: false,
@@ -1633,6 +1774,17 @@ export default function Home() {
     if (loaded.length) {
       setPhotos((current) => [...current, ...loaded]);
       setSelectedId((current) => current || loaded[0].id);
+      for (const photo of loaded) {
+        if (!photo.coordinates) continue;
+        void reverseGeocodeCity(photo.coordinates.latitude, photo.coordinates.longitude).then((city) => {
+          setPhotos((current) => current.map((item) => item.id === photo.id ? {
+            ...item,
+            metadata: { ...item.metadata, location: sharedMetadataOverridesRef.current.standard.location || city },
+            filmMetadata: { ...item.filmMetadata, location: sharedMetadataOverridesRef.current.film.location || city },
+            autoMetadata: { ...item.autoMetadata, location: city },
+          } : item));
+        });
+      }
     }
     const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (failed.length) {
@@ -1726,8 +1878,8 @@ export default function Home() {
   }
 
   function updateActiveElementText(value: string) {
-    if (["cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "date"].includes(activeElement)) {
-      const fieldMap: Record<string, keyof PhotoMetadata> = { cameraModel: "model", lens: "lens", aperture: "aperture", exposure: "exposure", iso: "iso", focalLength: "focalLength", date: "takenAt" };
+    if (["cameraModel", "lens", "aperture", "exposure", "iso", "focalLength", "date", "location"].includes(activeElement)) {
+      const fieldMap: Record<string, keyof PhotoMetadata> = { cameraModel: "model", lens: "lens", aperture: "aperture", exposure: "exposure", iso: "iso", focalLength: "focalLength", date: "takenAt", location: "location" };
       updateSharedMetadata(fieldMap[activeElement], value);
       return;
     }
@@ -1988,6 +2140,7 @@ export default function Home() {
               <label><span><b>光圈</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowAperture : settings.showAperture} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowAperture: checked } : { ...current, showAperture: checked }); }} /><i /></label>
               <label><span><b>快门</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowExposure : settings.showExposure} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowExposure: checked } : { ...current, showExposure: checked }); }} /><i /></label>
               <label><span><b>拍摄日期</b><small>胶片模式默认关闭</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowDate : settings.showDate} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowDate: checked } : { ...current, showDate: checked }); }} /><i /></label>
+              <label><span><b>拍摄地点</b><small>GPS 自动识别，也可手动填写</small></span><input type="checkbox" checked={locationVisible(settings)} onChange={(event) => { const checked = event.target.checked; setSettings((current) => ({ ...current, showLocationByPreset: { ...current.showLocationByPreset, [current.preset]: checked } })); }} /><i /></label>
               <label><span><b>镜头信息</b><small>镜头型号与规格</small></span><input type="checkbox" checked={settings.filmMode ? settings.filmShowLens : settings.showLens} onChange={(event) => { const checked = event.target.checked; setSettings((current) => current.filmMode ? { ...current, filmShowLens: checked } : { ...current, showLens: checked }); }} /><i /></label>
             </div>
 
@@ -2061,6 +2214,11 @@ export default function Home() {
                   <span>拍摄日期与时间</span>
                   <input type="datetime-local" value={selectedMetadata?.takenAt || ""} onChange={(event) => updateSharedMetadata("takenAt", event.target.value)} />
                 </label>
+                <label className="metadata-field full">
+                  <span>拍摄地点</span>
+                  <input value={selectedMetadata?.location || ""} placeholder="地点 / 城市名称" onChange={(event) => updateSharedMetadata("location", event.target.value)} />
+                </label>
+                <p className="trademark-note">有 GPS 的照片会自动识别城市；地点数据由 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> 提供，也可以随时手动修改。</p>
                 <p className="trademark-note">Logo 来自厂商官网，商标权归各厂商所有；没有内置图标的品牌会显示厂商名称。</p>
               </div>
               </section>
