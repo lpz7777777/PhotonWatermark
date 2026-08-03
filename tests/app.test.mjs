@@ -197,6 +197,11 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(floatingLayout, /photoHeight \* 0\.2/);
   assert.match(page, /paintShadowLayer\("rgba\(30,35,30,\.24\)"/);
   assert.match(page, /paintShadowLayer\("rgba\(25,29,25,\.2\)"/);
+  const centered = page.slice(page.indexOf("function drawCenteredCard"), page.indexOf("function drawFloatingCard"));
+  assert.match(centered, /\[0\.2725, 0\.74\]/);
+  assert.match(centered, /const dividerCenterY = parameterBaselineY - contentHeight \* 0\.037/);
+  assert.match(centered, /dividerCenterY - dividerHeight \/ 2/);
+  assert.match(centered, /dividerCenterY \+ dividerHeight \/ 2/);
 });
 
 test("starter preview markers are gone", async () => {

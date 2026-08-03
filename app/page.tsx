@@ -1078,10 +1078,13 @@ function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   context.fillRect(x, y, width, height);
   context.strokeStyle = "rgba(30,30,26,.24)";
   context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
-  for (const dividerX of [0.255, 0.73]) {
+  const parameterBaselineY = y + height * 0.67;
+  const dividerCenterY = parameterBaselineY - contentHeight * 0.037;
+  const dividerHeight = contentHeight * 0.15;
+  for (const dividerX of [0.2725, 0.74]) {
     context.beginPath();
-    context.moveTo(x + width * dividerX, y + height * 0.6);
-    context.lineTo(x + width * dividerX, y + height * 0.74);
+    context.moveTo(x + width * dividerX, dividerCenterY - dividerHeight / 2);
+    context.lineTo(x + width * dividerX, dividerCenterY + dividerHeight / 2);
     context.stroke();
   }
   if (showBrand) {
@@ -1092,12 +1095,12 @@ function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   }
   if (showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.5, y + height * 0.37, width * 0.34, contentHeight * 0.13, { align: "center", color: "#171815", weight: 700 });
   if (showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.5, width * 0.42, contentHeight * 0.1, { align: "center", color: "#777870", weight: 400 });
-  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.15, y + height * 0.67, width * 0.21, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
-  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
-  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.67, width * 0.09, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
-  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
-  if (showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.67, y + height * 0.67, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
-  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.85, y + height * 0.67, width * 0.18, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
+  if (showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.15, parameterBaselineY, width * 0.21, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
+  if (showFocal) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, parameterBaselineY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, parameterBaselineY, width * 0.09, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, parameterBaselineY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.67, parameterBaselineY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#262722", weight: 520 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.85, parameterBaselineY, width * 0.18, contentHeight * 0.105, { align: "center", color: "#262722", weight: 450 });
   if (showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.87, width * 0.42, contentHeight * 0.105, { align: "center", color: "#30312c", weight: 450 });
   context.restore();
 }
