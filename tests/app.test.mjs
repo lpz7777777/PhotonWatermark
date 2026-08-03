@@ -192,6 +192,11 @@ test("supports independent metadata switches, film workflow and movable elements
   const floating = page.slice(page.indexOf("function drawFloatingCard"), page.indexOf("function drawCinematicCard"));
   assert.match(floating, /\[0\.275, 0\.755\]/);
   assert.match(floating, /"iso"[\s\S]*"location"/);
+  assert.doesNotMatch(floating, /"cameraModel"|"lens"/);
+  const floatingLayout = page.slice(page.indexOf('if (settings.preset === "floating")'), page.indexOf('if (settings.preset === "cinematic")'));
+  assert.match(floatingLayout, /photoHeight \* 0\.2/);
+  assert.match(page, /paintShadowLayer\("rgba\(30,35,30,\.24\)"/);
+  assert.match(page, /paintShadowLayer\("rgba\(25,29,25,\.2\)"/);
 });
 
 test("starter preview markers are gone", async () => {

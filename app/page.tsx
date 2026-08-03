@@ -674,7 +674,7 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
 
   if (settings.preset === "floating") {
     const margin = Math.max(30, Math.round(Math.min(photoWidth, photoHeight) * 0.07));
-    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.27));
+    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.2));
     return {
       width: photoWidth + margin * 2,
       height: photoHeight + margin + cardBand,
@@ -1106,18 +1106,14 @@ function drawFloatingCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
   const meta = photo.metadata;
   const contentHeight = layout.photoHeight * 0.1612;
-  const rowY = y + height * 0.67;
+  const rowY = y + height * 0.58;
   context.save();
-  context.fillStyle = "#ffffff";
-  context.fillRect(x, y, width, height);
   if (settings.showBrand) {
     const brandWidth = width * 0.15;
-    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.19);
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.22);
     recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
     drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.7 * point.scale, false, "center");
   }
-  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.5, y + height * 0.34, width * 0.38, contentHeight * 0.105, { align: "center", color: "#20211e", weight: 650 });
-  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.5, y + height * 0.47, width * 0.48, contentHeight * 0.085, { align: "center", color: "#85867f", weight: 400 });
   context.strokeStyle = "rgba(29,30,27,.22)";
   context.lineWidth = Math.max(1, layout.photoWidth * 0.0005);
   for (const dividerX of locationVisible(settings) ? [0.275, 0.755] : [0.275]) {
@@ -1132,7 +1128,7 @@ function drawFloatingCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.57, rowY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
   if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, rowY, width * 0.1, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 520 });
   if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.86, rowY, width * 0.17, contentHeight * 0.105, { align: "center", color: "#292a26", weight: 450 });
-  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.88, width * 0.42, contentHeight * 0.105, { align: "center", color: "#383934", weight: 450 });
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.84, width * 0.42, contentHeight * 0.105, { align: "center", color: "#383934", weight: 450 });
   context.restore();
 }
 
@@ -1344,8 +1340,27 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     context.fillStyle = backdrop;
     context.fillRect(0, 0, layout.width, layout.height);
   }
-  if (settings.preset === "centered" || settings.preset === "floating" || settings.preset === "cinematic") {
-    const radius = settings.preset === "floating" ? Math.max(3, layout.photoWidth * 0.004) : Math.max(10, layout.photoWidth * 0.018);
+  if (settings.preset === "floating") {
+    const radius = Math.max(3, layout.photoWidth * 0.004);
+    const paintShadowLayer = (color: string, blur: number, offsetY: number) => {
+      context.save();
+      context.shadowColor = color;
+      context.shadowBlur = blur;
+      context.shadowOffsetY = offsetY;
+      context.fillStyle = "#ffffff";
+      roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, radius);
+      context.fill();
+      context.restore();
+    };
+    paintShadowLayer("rgba(30,35,30,.24)", Math.max(22, layout.photoWidth * 0.038), Math.max(12, layout.photoHeight * 0.02));
+    paintShadowLayer("rgba(25,29,25,.2)", Math.max(8, layout.photoWidth * 0.012), Math.max(5, layout.photoHeight * 0.008));
+    context.save();
+    roundedRect(context, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight, radius);
+    context.clip();
+    context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
+    context.restore();
+  } else if (settings.preset === "centered" || settings.preset === "cinematic") {
+    const radius = Math.max(10, layout.photoWidth * 0.018);
     context.save();
     context.shadowColor = settings.preset === "cinematic" ? "rgba(0,0,0,.5)" : "rgba(24,27,24,.28)";
     context.shadowBlur = Math.max(12, layout.photoWidth * 0.025);
