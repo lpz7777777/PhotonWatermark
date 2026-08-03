@@ -122,6 +122,7 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "centered", name: "纯白画册", note: "居中信息卡", swatch: "centered" },
   { id: "floating", name: "浮光画册", note: "悬浮留白", swatch: "floating" },
   { id: "cinematic", name: "暮色浮影", note: "柔焦暗场", swatch: "cinematic" },
+  { id: "immersive", name: "沉浸底片", note: "画内叠印", swatch: "immersive" },
   { id: "noir", name: "夜黑铭牌", note: "高反差", swatch: "noir" },
   { id: "gallery", name: "画廊相框", note: "四周留白", swatch: "gallery" },
   { id: "overlay", name: "渐变叠印", note: "不增加尺寸", swatch: "overlay" },
@@ -132,7 +133,6 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
   { id: "monolith", name: "静奢石碑", note: "暖白留白", swatch: "monolith" },
   { id: "archive", name: "影像档案", note: "理性秩序", swatch: "archive" },
-  { id: "immersive", name: "沉浸底片", note: "画内叠印", swatch: "immersive" },
   { id: "sidecar", name: "侧栏档案", note: "右侧参数栏", swatch: "sidecar" },
 ];
 
@@ -147,7 +147,7 @@ function isStripePreset(preset: PresetId) {
 }
 
 function locationVisible(settings: Settings) {
-  return settings.showLocationByPreset[settings.preset] ?? settings.preset === "centered";
+  return settings.showLocationByPreset[settings.preset] ?? ["centered", "floating", "cinematic"].includes(settings.preset);
 }
 
 function reverseGeocodeCity(latitude: number, longitude: number) {
@@ -243,6 +243,7 @@ const filmElementIds: ElementId[] = [...standardElementIds, "filmBrand", "filmNa
 const compactFilmElementIds: ElementId[] = ["cameraBrand", "cameraModel", "lens", "filmBrand", "filmName", "iso", "location"];
 const defaultTransform: ElementTransform = { x: 0, y: 0, scale: 1, fontScale: 1 };
 let collectingElementBounds: ElementBoundsMap | null = null;
+let italicThemeText = false;
 
 function recordElementBounds(element: ElementId, bounds: ElementBounds) {
   if (!collectingElementBounds) return;
@@ -375,7 +376,7 @@ function elementPoint(settings: Settings, layout: Layout, element: ElementId, x:
 }
 
 function font(size: number, weight = 500, family = 'Arial, "PingFang SC", sans-serif') {
-  return `${weight} ${Math.max(8, Math.round(size))}px ${family}`;
+  return `${italicThemeText ? "italic " : ""}${weight} ${Math.max(8, Math.round(size))}px ${family}`;
 }
 
 function drawTextFit(
@@ -690,7 +691,7 @@ function getLayout(photo: PhotoItem, settings: Settings, scale = 1): Layout {
 
   if (settings.preset === "cinematic") {
     const margin = Math.max(18, Math.round(Math.min(photoWidth, photoHeight) * 0.025));
-    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.25));
+    const cardBand = Math.max(baseBand, Math.round(photoHeight * 0.17));
     return {
       width: photoWidth + margin * 2,
       height: photoHeight + margin + cardBand,
@@ -1142,22 +1143,19 @@ function drawCinematicCard(context: CanvasRenderingContext2D, photo: PhotoItem, 
   context.save();
   if (settings.showBrand) {
     const brandWidth = width * 0.18;
-    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.2);
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.5, y + height * 0.24);
     recordElementBounds("cameraBrand", { x: point.x - brandWidth * point.scale / 2, y: point.y - contentHeight * 0.16 * point.scale, width: brandWidth * point.scale, height: contentHeight * 0.32 * point.scale });
     drawBrand(context, meta.make, meta.model, point.x, point.y, brandWidth * point.scale, contentHeight * 0.75 * point.scale, true, "center", true);
   }
-  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.42, y + height * 0.38, width * 0.27, contentHeight * 0.09, { align: "right", color: "rgba(255,255,255,.72)", weight: 550 });
-  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.58, y + height * 0.38, width * 0.27, contentHeight * 0.085, { color: "rgba(255,255,255,.56)", weight: 400 });
   const parameterFamily = '"Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
-  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
-  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.6, width * 0.1, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
-  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
-  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.6, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.34, y + height * 0.55, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.45, y + height * 0.55, width * 0.1, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.56, y + height * 0.55, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO${meta.iso || "—"}`, x + width * 0.68, y + height * 0.55, width * 0.11, contentHeight * 0.12, { align: "center", color: "#ffffff", weight: 680, family: parameterFamily });
   const locationX = settings.showDate ? 0.42 : 0.5;
   const dateX = locationVisible(settings) ? 0.62 : 0.5;
-  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * locationX, y + height * 0.79, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.62)", weight: 400, family: "Georgia, serif" });
-  if (settings.showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * dateX, y + height * 0.79, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.58)", weight: 400 });
-  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `© ${settings.signature}`, x + width * 0.5, y + height * 0.92, width * 0.34, contentHeight * 0.075, { align: "center", color: "rgba(255,255,255,.5)", weight: 450 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * locationX, y + height * 0.82, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.62)", weight: 400, family: "Georgia, serif" });
+  if (settings.showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * dateX, y + height * 0.82, width * 0.28, contentHeight * 0.09, { align: "center", color: "rgba(255,255,255,.58)", weight: 400 });
   context.restore();
 }
 
@@ -1326,6 +1324,7 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
   if (!context) throw new Error("浏览器无法创建绘图画布");
   const bounds: ElementBoundsMap = {};
   collectingElementBounds = collectBounds ? bounds : null;
+  italicThemeText = settings.preset === "cinematic" || settings.preset === "immersive";
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
 
@@ -1423,6 +1422,7 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     else drawStandardBand(context, photo, settings, layout, settings.preset === "noir", theme);
   }
   collectingElementBounds = null;
+  italicThemeText = false;
   return { canvas, bounds };
 }
 
@@ -1548,26 +1548,27 @@ async function readPhoto(file: File): Promise<PhotoItem> {
       width = browserImage.naturalWidth;
       height = browserImage.naturalHeight;
     }
-    const raw = await exifr.parse(file, {
-      pick: [
-        "Make",
-        "Model",
-        "LensModel",
-        "FNumber",
-        "ExposureTime",
-        "ISO",
-        "ISOSpeedRatings",
-        "PhotographicSensitivity",
-        "FocalLength",
-        "DateTimeOriginal",
-        "CreateDate",
-        "latitude",
-        "longitude",
-      ],
-    }).catch(() => undefined);
+    const [raw, gps] = await Promise.all([
+      exifr.parse(file, {
+        pick: [
+          "Make",
+          "Model",
+          "LensModel",
+          "FNumber",
+          "ExposureTime",
+          "ISO",
+          "ISOSpeedRatings",
+          "PhotographicSensitivity",
+          "FocalLength",
+          "DateTimeOriginal",
+          "CreateDate",
+        ],
+      }).catch(() => undefined),
+      exifr.gps(file).catch(() => undefined),
+    ]);
     const detectedModel = clean(raw?.Model);
-    const latitude = asNumber(raw?.latitude);
-    const longitude = asNumber(raw?.longitude);
+    const latitude = asNumber(gps?.latitude);
+    const longitude = asNumber(gps?.longitude);
     const metadata: PhotoMetadata = {
       make: clean(raw?.Make),
       model: detectedModel?.toUpperCase() === "BKQ-AN90" ? "Magic 8 Pro" : detectedModel,

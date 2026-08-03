@@ -24,6 +24,9 @@ test("ships all watermark presets and local export paths", async () => {
   assert.match(page, /\[1, 4, 8, 16, 24, 32\]\.includes\(bits\)/);
   assert.match(page, /function loadBrowserImage/);
   assert.doesNotMatch(page.slice(page.indexOf("async function readPhoto"), page.indexOf("function canvasToBlob")), /image\.decode\(\)/);
+  const presetList = page.slice(page.indexOf("const presets"), page.indexOf("const acceptedTypes"));
+  assert.ok(presetList.indexOf('id: "cinematic"') < presetList.indexOf('id: "immersive"'));
+  assert.ok(presetList.indexOf('id: "immersive"') < presetList.indexOf('id: "noir"'));
 });
 
 test("uses official logo assets and shared batch EXIF overrides", async () => {
@@ -169,12 +172,26 @@ test("supports independent metadata switches, film workflow and movable elements
   }
   assert.match(page, /location: "拍摄地点"/);
   assert.match(page, /locationVisible\(settings\)/);
-  assert.match(page, /"latitude"/);
-  assert.match(page, /"longitude"/);
+  assert.match(page, /gps\?\.latitude/);
+  assert.match(page, /gps\?\.longitude/);
   assert.match(page, /nominatim\.openstreetmap\.org\/reverse/);
   assert.match(page, /showLocationByPreset: \{ centered: true \}/);
+  assert.match(page, /\["centered", "floating", "cinematic"\]\.includes\(settings\.preset\)/);
+  assert.match(page, /exifr\.gps\(file\)/);
+  assert.match(page, /const latitude = asNumber\(gps\?\.latitude\)/);
+  assert.match(page, /const longitude = asNumber\(gps\?\.longitude\)/);
   assert.match(page, /Segoe UI Variable Display/);
   assert.match(page, /const parameterFamily =/);
+  assert.match(page, /italicThemeText = settings\.preset === "cinematic" \|\| settings\.preset === "immersive"/);
+  assert.match(page, /italicThemeText \? "italic " : ""/);
+  const cinematic = page.slice(page.indexOf("function drawCinematicCard"), page.indexOf("function drawImmersiveCard"));
+  assert.doesNotMatch(cinematic, /"cameraModel"|"lens"|"signature"/);
+  assert.match(cinematic, /"cameraBrand"[\s\S]*"focalLength"[\s\S]*"location"[\s\S]*"date"/);
+  const cinematicLayout = page.slice(page.indexOf('if (settings.preset === "cinematic")'), page.indexOf('if (settings.preset === "centered")'));
+  assert.match(cinematicLayout, /photoHeight \* 0\.17/);
+  const floating = page.slice(page.indexOf("function drawFloatingCard"), page.indexOf("function drawCinematicCard"));
+  assert.match(floating, /\[0\.275, 0\.755\]/);
+  assert.match(floating, /"iso"[\s\S]*"location"/);
 });
 
 test("starter preview markers are gone", async () => {
