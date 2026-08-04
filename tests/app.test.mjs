@@ -210,6 +210,8 @@ test("supports independent metadata switches, film workflow and movable elements
   assert.match(page, /brightness\(\.68\) saturate\(\.9\)/);
   assert.match(page, /backdrop\.addColorStop\(1, "rgba\(7,10,9,\.48\)"\)/);
   const centered = page.slice(page.indexOf("function drawCenteredCard"), page.indexOf("function drawFloatingCard"));
+  assert.doesNotMatch(centered, /fillRect\(x, y, width, height\)/);
+  assert.doesNotMatch(centered, /#fffefb/);
   assert.match(centered, /\[0\.2725, 0\.74\]/);
   assert.match(centered, /const dividerCenterY = parameterBaselineY - contentHeight \* 0\.037/);
   assert.match(centered, /dividerCenterY - dividerHeight \/ 2/);

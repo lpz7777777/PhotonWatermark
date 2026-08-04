@@ -1195,8 +1195,6 @@ function drawCenteredCard(context: CanvasRenderingContext2D, photo: PhotoItem, s
   const showFocal = settings.filmMode ? settings.filmShowFocalLength : settings.showFocalLength;
   const showSignature = settings.filmMode ? settings.filmShowSignature : settings.showSignature;
   context.save();
-  context.fillStyle = "#fffefb";
-  context.fillRect(x, y, width, height);
   context.strokeStyle = "rgba(30,30,26,.24)";
   context.lineWidth = Math.max(1, layout.photoWidth * 0.00045);
   const parameterBaselineY = y + height * 0.67;
