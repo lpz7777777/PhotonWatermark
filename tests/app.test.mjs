@@ -59,7 +59,7 @@ test("uses official logo assets and shared batch EXIF overrides", async () => {
   const logoRenderer = page.slice(page.indexOf("function drawLogoDefinition"), page.indexOf("function drawBrand"));
   assert.doesNotMatch(logoRenderer, /rgba\(255,255,255,\.96\)/);
   assert.doesNotMatch(logoRenderer, /roundedRect/);
-  for (const darkWordmark of ["FUJIFILM", "Panasonic", "RICOH"]) {
+  for (const darkWordmark of ["FUJIFILM", "OLYMPUS", "Panasonic", "RICOH"]) {
     assert.match(page, new RegExp(`value: "${darkWordmark}"[^\\n]+inverseMonochrome: true`));
   }
   assert.match(page, /align: CanvasTextAlign = "left"/);

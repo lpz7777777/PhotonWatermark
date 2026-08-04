@@ -196,7 +196,7 @@ const brands: BrandDefinition[] = [
   { value: "Leica Camera AG", label: "Leica", keywords: ["LEICA"], asset: "leica.svg", color: "#d71920" },
   { value: "Hasselblad", label: "Hasselblad", keywords: ["HASSELBLAD"], asset: "hasselblad.svg", monochrome: true },
   { value: "OM SYSTEM", label: "OM SYSTEM", keywords: ["OM SYSTEM", "OM DIGITAL"], asset: "omsystem.svg", monochrome: true },
-  { value: "OLYMPUS", label: "Olympus", keywords: ["OLYMPUS"], asset: "olympus.png" },
+  { value: "OLYMPUS", label: "Olympus", keywords: ["OLYMPUS"], asset: "olympus.png", inverseMonochrome: true },
   { value: "Panasonic", label: "Panasonic / Lumix", keywords: ["PANASONIC", "LUMIX"], asset: "panasonic.png", inverseMonochrome: true },
   { value: "RICOH", label: "Ricoh", keywords: ["RICOH"], asset: "ricoh.svg", inverseMonochrome: true },
   { value: "PENTAX", label: "Pentax", keywords: ["PENTAX"], color: "#d71920" },
