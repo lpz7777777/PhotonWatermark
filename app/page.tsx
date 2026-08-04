@@ -4,7 +4,7 @@ import { ChangeEvent, DragEvent, MouseEvent as ReactMouseEvent, PointerEvent as 
 import exifr from "exifr";
 import JSZip from "jszip";
 
-type PresetId = "classic" | "noir" | "gallery" | "overlay" | "kodak" | "fujifilm" | "northern-blue" | "forest-gold" | "editorial" | "monolith" | "archive" | "centered" | "floating" | "cinematic" | "immersive" | "sidecar";
+type PresetId = "classic" | "noir" | "gallery" | "overlay" | "kodak" | "fujifilm" | "provia" | "northern-blue" | "forest-gold" | "editorial" | "monolith" | "archive" | "centered" | "floating" | "cinematic" | "immersive" | "sidecar";
 type ExportFormat = "png" | "jpeg";
 type ElementId = "cameraBrand" | "cameraModel" | "lens" | "aperture" | "exposure" | "iso" | "focalLength" | "signature" | "date" | "location" | "filmBrand" | "filmName" | "lab" | "scanner";
 type LayoutKey = PresetId | `film-mode-${PresetId}` | `film-compact-${PresetId}`;
@@ -128,6 +128,7 @@ const presets: Array<{ id: PresetId; name: string; note: string; swatch: string 
   { id: "overlay", name: "渐变叠印", note: "不增加尺寸", swatch: "overlay" },
   { id: "kodak", name: "柯达胶片", note: "黄 · 红主题", swatch: "kodak" },
   { id: "fujifilm", name: "富士胶片", note: "高级绿主题", swatch: "fujifilm" },
+  { id: "provia", name: "PROVIA 100F", note: "反转片包装", swatch: "provia" },
   { id: "northern-blue", name: "北境蓝调", note: "冰川蓝 · 深湖蓝", swatch: "northern-blue" },
   { id: "forest-gold", name: "林野金绿", note: "暖金黄 · 森林绿", swatch: "forest-gold" },
   { id: "editorial", name: "编辑部", note: "瑞士网格", swatch: "editorial" },
@@ -455,6 +456,15 @@ function themePalette(preset: PresetId): ThemePalette | undefined {
       muted: "#5f625f",
       faint: "#8b8d85",
       accent: "#01916D",
+    };
+  }
+  if (preset === "provia") {
+    return {
+      background: "#ffffff",
+      ink: "#f2d88a",
+      muted: "#d8d9ee",
+      faint: "#aeb2d8",
+      accent: "#00A567",
     };
   }
   if (preset === "northern-blue") {
@@ -814,6 +824,117 @@ function drawThemeMicroDivider(
   context.globalAlpha = 0.34;
   context.fillStyle = theme.accent;
   context.fillRect(x, centerY - height / 2, Math.max(1, layout.photoWidth * 0.00065), height);
+  context.restore();
+}
+
+function paintProviaPackage(context: CanvasRenderingContext2D, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const body = context.createLinearGradient(x, y, x + width, y + height);
+  body.addColorStop(0, "#17163f");
+  body.addColorStop(0.56, "#28248a");
+  body.addColorStop(1, "#111224");
+  context.fillStyle = body;
+  context.fillRect(x, y, width, height);
+  const header = context.createLinearGradient(x, y, x + width, y);
+  header.addColorStop(0, "#008f59");
+  header.addColorStop(0.55, "#08ad70");
+  header.addColorStop(1, "#007d4d");
+  context.fillStyle = header;
+  context.fillRect(x, y, width, height * 0.3);
+  context.fillStyle = "rgba(174,181,255,.7)";
+  context.fillRect(x, y + height * 0.3, width, Math.max(2, layout.photoHeight * 0.0015));
+  context.fillStyle = "rgba(242,216,138,.78)";
+  context.fillRect(x, y + height * 0.965, width, Math.max(2, layout.photoHeight * 0.0012));
+}
+
+function paintProviaLabel(context: CanvasRenderingContext2D, layout: Layout, x: number, y: number, width: number, height: number) {
+  context.save();
+  context.shadowColor = "rgba(169,177,255,.7)";
+  context.shadowBlur = Math.max(6, layout.photoWidth * 0.006);
+  context.fillStyle = "rgba(8,9,15,.94)";
+  context.fillRect(x, y, width, height);
+  context.shadowColor = "transparent";
+  context.strokeStyle = "rgba(242,216,138,.76)";
+  context.lineWidth = Math.max(1, layout.photoWidth * 0.0006);
+  context.strokeRect(x, y, width, height);
+  context.restore();
+}
+
+function drawProviaStandardBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.metadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const gold = "#f2d88a";
+  const white = "#f6f8f3";
+  const pale = "#c9ccea";
+  context.save();
+  context.textBaseline = "middle";
+  paintProviaPackage(context, layout);
+  paintProviaLabel(context, layout, x + width * 0.235, y + height * 0.39, width * 0.45, height * 0.43);
+  if (settings.showBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.028, y + height * 0.15);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.15 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.15 * point.scale, contentHeight * 0.68 * point.scale, true);
+  }
+  if (settings.showModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.22, y + height * 0.15, width * 0.17, contentHeight * 0.15, { color: white, weight: 750 });
+  if (settings.showLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.4, y + height * 0.15, width * 0.28, contentHeight * 0.115, { color: "rgba(255,255,255,.78)", weight: 450 });
+  drawTextFit(context, "PROFESSIONAL", x + width * 0.035, y + height * 0.6, width * 0.16, contentHeight * 0.115, { color: gold, weight: 400, family: "Georgia, serif" });
+  if (settings.showAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.295, y + height * 0.605, width * 0.075, contentHeight * 0.145, { align: "center", color: gold, weight: 600, family: "Georgia, serif" });
+  if (settings.showExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.405, y + height * 0.605, width * 0.09, contentHeight * 0.145, { align: "center", color: gold, weight: 600, family: "Georgia, serif" });
+  if (settings.showIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "—"}`, x + width * 0.525, y + height * 0.605, width * 0.1, contentHeight * 0.145, { align: "center", color: gold, weight: 600, family: "Georgia, serif" });
+  if (settings.showFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.635, y + height * 0.605, width * 0.08, contentHeight * 0.145, { align: "center", color: gold, weight: 600, family: "Georgia, serif" });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.82, y + height * 0.58, width * 0.18, contentHeight * 0.105, { align: "center", color: pale, weight: 500 });
+  if (settings.showDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.97, y + height * 0.15, width * 0.22, contentHeight * 0.105, { align: "right", color: white, weight: 450 });
+  if (settings.showSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.97, y + height * 0.77, width * 0.24, contentHeight * 0.11, { align: "right", color: white, weight: 500 });
+  context.restore();
+}
+
+function drawProviaFilmBand(context: CanvasRenderingContext2D, photo: PhotoItem, settings: Settings, layout: Layout, compact = false) {
+  const { bandX: x, bandY: y, bandWidth: width, bandHeight: height } = layout;
+  const meta = photo.filmMetadata;
+  const contentHeight = layout.photoHeight * 0.1612;
+  const filmBrand = catalogInfo(filmBrands, settings.filmBrand);
+  const scannerBrand = catalogInfo(scannerBrands, settings.scannerBrand);
+  const gold = "#f2d88a";
+  const white = "#f6f8f3";
+  const pale = "#c9ccea";
+  const topRow = y + height * 0.15;
+  const bottomRow = y + height * 0.64;
+  context.save();
+  context.textBaseline = "middle";
+  paintProviaPackage(context, layout);
+  paintProviaLabel(context, layout, x + width * 0.205, y + height * 0.405, width * (compact ? 0.59 : 0.4), height * 0.46);
+  if (settings.filmShowBrand) {
+    const point = elementPoint(settings, layout, "cameraBrand", x + width * 0.025, topRow);
+    recordElementBounds("cameraBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.14 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawBrand(context, meta.make, meta.model, point.x, point.y, width * 0.14 * point.scale, contentHeight * 0.68 * point.scale, true);
+  }
+  if (settings.filmShowModel) drawElementText(context, settings, layout, "cameraModel", meta.model || "CAMERA", x + width * 0.2, topRow, width * 0.13, contentHeight * 0.145, { color: white, weight: 750 });
+  if (settings.filmShowLens && meta.lens) drawElementText(context, settings, layout, "lens", meta.lens, x + width * 0.34, topRow, width * 0.23, contentHeight * 0.11, { color: "rgba(255,255,255,.76)", weight: 450 });
+  if (!compact && settings.showScanner) {
+    const point = elementPoint(settings, layout, "scanner", x + width * 0.63, topRow);
+    recordElementBounds("scanner", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.14 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, scannerBrand, point.x, point.y, width * 0.14 * point.scale, contentHeight * 0.64 * point.scale, true);
+    drawElementText(context, settings, layout, "scanner", settings.scannerName || "FILM SCANNER", x + width * 0.8, topRow, width * 0.17, contentHeight * 0.125, { color: white, weight: 650 });
+  }
+  if (settings.showFilmBrand) {
+    const point = elementPoint(settings, layout, "filmBrand", x + width * 0.025, bottomRow);
+    recordElementBounds("filmBrand", { x: point.x, y: point.y - contentHeight * 0.18 * point.scale, width: width * 0.14 * point.scale, height: contentHeight * 0.36 * point.scale });
+    drawLogoDefinition(context, filmBrand, point.x, point.y, width * 0.14 * point.scale, contentHeight * 0.68 * point.scale, true);
+  }
+  if (settings.showFilmName) drawElementText(context, settings, layout, "filmName", settings.filmName || "PROVIA 100F", x + width * 0.245, bottomRow, width * (compact ? 0.38 : 0.27), contentHeight * 0.2, { color: gold, weight: 600, family: "Georgia, serif" });
+  if (settings.filmShowIso) drawElementText(context, settings, layout, "iso", `ISO ${meta.iso || "100"}`, x + width * (compact ? 0.67 : 0.51), bottomRow, width * 0.1, contentHeight * 0.145, { color: gold, weight: 600, family: "Georgia, serif" });
+  if (!compact && settings.showLab) {
+    drawElementText(context, settings, layout, "lab", "DEVELOPED BY", x + width * 0.65, y + height * 0.52, width * 0.16, contentHeight * 0.09, { color: pale, weight: 650 });
+    drawElementText(context, settings, layout, "lab", settings.labName || "YOUR FILM LAB", x + width * 0.65, y + height * 0.75, width * 0.31, contentHeight * 0.145, { color: white, weight: 650 });
+  }
+  const optionalRow = y + height * 0.93;
+  if (settings.filmShowAperture) drawElementText(context, settings, layout, "aperture", formatAperture(meta.aperture), x + width * 0.22, optionalRow, width * 0.08, contentHeight * 0.08, { color: pale, weight: 550 });
+  if (settings.filmShowExposure) drawElementText(context, settings, layout, "exposure", formatExposure(meta.exposure), x + width * 0.31, optionalRow, width * 0.08, contentHeight * 0.08, { color: pale, weight: 550 });
+  if (settings.filmShowFocalLength) drawElementText(context, settings, layout, "focalLength", formatFocal(meta.focalLength), x + width * 0.4, optionalRow, width * 0.08, contentHeight * 0.08, { color: pale, weight: 550 });
+  if (settings.filmShowDate) drawElementText(context, settings, layout, "date", formatDate(meta.takenAt), x + width * 0.64, optionalRow, width * 0.15, contentHeight * 0.075, { color: pale, weight: 450 });
+  if (locationVisible(settings)) drawElementText(context, settings, layout, "location", meta.location || "地点", x + width * 0.79, optionalRow, width * 0.13, contentHeight * 0.075, { color: pale, weight: 450 });
+  if (settings.filmShowSignature && settings.signature) drawElementText(context, settings, layout, "signature", `by ${settings.signature}`, x + width * 0.97, optionalRow, width * 0.18, contentHeight * 0.075, { align: "right", color: pale, weight: 500 });
   context.restore();
 }
 
@@ -1380,7 +1501,9 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     context.drawImage(photo.image, layout.photoX, layout.photoY, layout.photoWidth, layout.photoHeight);
   }
 
-  if (settings.filmMode && settings.filmCompact) {
+  if (settings.filmMode && settings.filmCompact && settings.preset === "provia") {
+    drawProviaFilmBand(context, photo, settings, layout, true);
+  } else if (settings.filmMode && settings.filmCompact) {
     const compactInverse = settings.preset === "overlay" || settings.preset === "immersive" || settings.preset === "cinematic" || settings.preset === "noir";
     if (settings.preset === "overlay" || settings.preset === "immersive") {
       const gradient = context.createLinearGradient(0, layout.bandY - layout.bandHeight * 0.45, 0, layout.bandY + layout.bandHeight);
@@ -1396,6 +1519,9 @@ function renderPhoto(photo: PhotoItem, settings: Settings, maxEdge?: number, col
     }
     if (theme) drawThemeRules(context, layout, theme, settings.preset);
     drawCompactFilmBand(context, photo, settings, layout, compactInverse, theme);
+  } else if (settings.preset === "provia") {
+    if (settings.filmMode) drawProviaFilmBand(context, photo, settings, layout);
+    else drawProviaStandardBand(context, photo, settings, layout);
   } else if (settings.preset === "centered") {
     if (settings.filmMode) drawFilmWorkflowBand(context, photo, settings, layout);
     else drawCenteredCard(context, photo, settings, layout);

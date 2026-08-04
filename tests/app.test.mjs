@@ -6,7 +6,7 @@ const root = new URL("../", import.meta.url);
 
 test("ships all watermark presets and local export paths", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
-  for (const preset of ["classic", "centered", "floating", "cinematic", "noir", "gallery", "overlay", "kodak", "fujifilm", "northern-blue", "forest-gold", "editorial", "monolith", "archive", "immersive", "sidecar"]) {
+  for (const preset of ["classic", "centered", "floating", "cinematic", "noir", "gallery", "overlay", "kodak", "fujifilm", "provia", "northern-blue", "forest-gold", "editorial", "monolith", "archive", "immersive", "sidecar"]) {
     assert.match(page, new RegExp(`id: "${preset}"`));
   }
   assert.doesNotMatch(page, /id: "film"/);
@@ -146,6 +146,16 @@ test("supports independent metadata switches, film workflow and movable elements
   for (const theme of ["northern-blue", "forest-gold"]) assert.match(page, new RegExp(theme, "g"));
   for (const color of ["#8EC5E8", "#174A7E", "#E4B538", "#356B45"]) assert.match(page, new RegExp(color, "i"));
   assert.match(page, /function drawThemeMicroDivider/);
+  assert.match(page, /name: "PROVIA 100F"/);
+  assert.match(page, /function paintProviaPackage/);
+  assert.match(page, /function paintProviaLabel/);
+  assert.match(page, /function drawProviaStandardBand/);
+  assert.match(page, /function drawProviaFilmBand/);
+  assert.match(page, /settings\.preset === "provia"[\s\S]*drawProviaFilmBand/);
+  assert.match(page, /drawProviaStandardBand/);
+  assert.match(page, /#17163f/i);
+  assert.match(page, /#08ad70/i);
+  assert.match(page, /#f2d88a/i);
   assert.match(page, /detailsSecondaryX - 0\.015/);
   assert.match(page, /scannerModelX - 0\.015/);
   assert.match(page, /settings\.showFilmName && settings\.filmShowIso/);
@@ -215,4 +225,12 @@ test("starter preview markers are gone", async () => {
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
   assert.doesNotMatch(layout, /Starter Project|codex-preview/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+});
+
+test("ships a distinctive PROVIA preset swatch", async () => {
+  const css = await readFile(new URL("app/globals.css", root), "utf8");
+  assert.match(css, /\.preset-swatch\.provia/);
+  assert.match(css, /content: "100F"/);
+  assert.match(css, /#06a66b/i);
+  assert.match(css, /#282481/i);
 });

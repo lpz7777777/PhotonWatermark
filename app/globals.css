@@ -548,6 +548,11 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .preset-swatch.fujifilm::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #01916d 0 28.7%, #99d3c5 28.7% 100%); }
 .preset-swatch.fujifilm i { left: 8px; width: 20px; height: 2px; bottom: 4px; background: #15120a; }
 .preset-swatch.fujifilm b { right: 8px; width: 29px; height: 2px; bottom: 4px; background: #5f625f; }
+.preset-swatch.provia { background: linear-gradient(180deg, #06a66b 0 28%, #282481 29% 100%); }
+.preset-swatch.provia::before { inset: 17px 12px 8px; border: 1px solid rgba(240,216,138,.7); background: #101014; box-shadow: 0 0 6px rgba(174,181,255,.55); }
+.preset-swatch.provia::after { content: "100F"; position: absolute; left: 0; right: 0; bottom: 13px; color: #f0d889; text-align: center; font: 700 7px Georgia, serif; letter-spacing: .06em; }
+.preset-swatch.provia i { left: 6px; bottom: 32px; width: 27px; height: 2px; background: rgba(255,255,255,.9); }
+.preset-swatch.provia b { right: 6px; bottom: 32px; width: 22px; height: 2px; background: rgba(255,255,255,.55); }
 .preset-swatch.northern-blue { background: #fff; }
 .preset-swatch.northern-blue::before { bottom: 11px; background: linear-gradient(145deg, #94bdd2, #dce9ed); }
 .preset-swatch.northern-blue::after { content: ""; position: absolute; left: 0; right: 0; bottom: 9px; height: 4px; background: linear-gradient(90deg, #8ec5e8 0 28.7%, #174a7e 28.7% 100%); }
